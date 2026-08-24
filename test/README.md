@@ -45,6 +45,25 @@ profile with an overflow/tap-target audit.
 
 Screenshots land in `test/shots/` (override with `SHOTS=/path`).
 
+## 3. Mobile device matrix — `mobile-matrix.js`
+
+Seven-device round against the live site: iPhone 17 Pro Max / iPhone 17 /
+iPhone SE / iPad Mini / iPad Pro 11 on **WebKit** (real Safari engine, mock
+mic built in), Pixel 9 Pro XL / Galaxy S24 on **Chromium** — all Playwright
+built-in descriptors. Per device: full touch flow (create → bot → tokens →
+start → roll → tap piece → sticker → theme → voice), a tap-target/overflow
+audit per stage, a 10-player round-board pawn-size measurement, iPad
+landscape passes, and a slow-4G + 4× CPU throttled load timing (Chromium
+only — CDP).
+
+```sh
+node test/mobile-matrix.js                    # full matrix (~20 min)
+ONLY="iPhone SE" node test/mobile-matrix.js   # single device
+```
+
+Screenshots + `mobile-results.json` land in `test/shots-mobile/` (override
+with `SHOTS=/path`).
+
 Notes:
 - Voice needs a secure context (https) — the default live URL provides that.
 - Contexts use `reducedMotion: "reduce"`: the ROLL button's breathe animation
