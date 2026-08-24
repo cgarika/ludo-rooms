@@ -984,9 +984,8 @@ function applyTheme(pref){
     btn.innerHTML = resolved === "dark" ? "&#9788;" : "&#9789;";
     btn.title = resolved === "dark" ? "Switch to light board" : "Switch to dark board";
   }
-  // force board redraw with new palette
-  lastBoardKey = "";
-  if (typeof S !== "undefined" && S.room) drawBoard(S.room, true);
+  // force board redraw with new palette (no-op during initial load, before state exists)
+  try { lastBoardKey = ""; if (S && S.room) drawBoard(S.room, true); } catch (e) {}
 }
 let themePref = localStorage.getItem(THEME_KEY) || "auto";
 applyTheme(themePref);
