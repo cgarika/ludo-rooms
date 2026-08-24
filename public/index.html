@@ -709,6 +709,15 @@ html[data-theme="dark"] #boardwrap::after{
   box-shadow:0 26px 56px rgba(0,0,0,.5),0 0 0 1px rgba(255,203,79,.1),0 0 42px rgba(255,194,51,.28),inset 0 1px 0 rgba(255,255,255,.12);
 }
 
+  .teamtag{ font-size:10px; font-weight:800; padding:2px 7px; border-radius:8px;
+    background:rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.18); letter-spacing:.06em; }
+  .voicebar{ display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .voicebar .btn{ width:auto; }
+  .voicewho{ font-size:12.5px; font-weight:700; color:var(--mut); flex:1; min-width:120px; }
+  .voiceleave{ font-size:12px; color:var(--mut); font-weight:700; }
+  #voiceBtn.live{ background:linear-gradient(180deg,#3ee68b,#1eb567); color:#fff; border:none; box-shadow:0 6px 16px rgba(51,209,122,.4); }
+  #voiceBtn.muted{ background:linear-gradient(180deg,#ff7a7a,#e84040); color:#fff; border:none; box-shadow:0 6px 16px rgba(232,64,64,.4); }
+  audio.vpeer{ display:none; }
 </style>
 </head>
 <body>
@@ -748,6 +757,10 @@ html[data-theme="dark"] #boardwrap::after{
   <div class="label" style="margin-top:14px">Tokens per player</div>
   <div class="tokrow" id="tokrow"></div>
   <div class="setnote" id="toknote"></div>
+  <div class="label mt12">Teams</div>
+  <div class="tokrow" id="teamrow"></div>
+  <div class="setnote" id="teamnote"></div>
+  <div class="tokrow mt10" id="botrow"></div>
   <div class="mt10"></div>
   <button id="startBtn" class="btn green hidden">Start game</button>
   <div id="waitmsg" class="center hidden" style="font-weight:700;color:var(--mut);font-size:14px;">Waiting for the host to start...</div>
@@ -776,6 +789,11 @@ html[data-theme="dark"] #boardwrap::after{
       <div class="mt12"></div>
       <button id="rematchBtn" class="btn green hidden">Rematch</button>
       <div id="rematchWait" class="hidden" style="font-weight:700;color:var(--mut);font-size:14px;">Host can start a rematch.</div>
+    </div>
+    <div id="voicebar" class="voicebar hidden">
+      <button id="voiceBtn" class="btn small plain">&#127908; Join voice</button>
+      <a href="#" id="voiceLeave" class="voiceleave hidden">leave voice</a>
+      <div id="voicewho" class="voicewho"></div>
     </div>
     <div class="mt10"></div>
     <button id="leaveGameBtn" class="btn small plain" style="width:100%">Leave game</button>
@@ -1075,6 +1093,15 @@ $("tokrow").addEventListener("click", (e)=>{
   const b = e.target.closest("[data-t]");
   if (!b || !S || S.room.status !== "lobby" || S.mySeat !== S.room.hostSeat) return;
   socket.emit("settings", { tokens: Number(b.getAttribute("data-t")) });
+$("teamrow").addEventListener("click", ()=>{
+  const b = document.querySelector("#teamrow .teambtn");
+  if (!b || b.classList.contains("na")) return;
+  socket.emit("settings", { team: !(S && S.room && S.room.teamChoice) });
+});
+$("botrow").addEventListener("click", (e)=>{
+  if (e.target.closest("#addBotBtn")) socket.emit("addBot");
+  else if (e.target.closest("#delBotBtn")) socket.emit("removeBot");
+});
 });
 
 /* chat wiring */
@@ -1198,6 +1225,7 @@ function render(){
   handleChat(r);
   if (r.status === "lobby"){ overCelebrated = false; renderLobby(r); }
   else renderGame(r);
+  renderVoice(r);
 }
 
 function renderLobby(r){
@@ -1209,7 +1237,7 @@ function renderLobby(r){
       <div class="playerrow">
         <span class="pav">${p.avatar||""}</span>
         <div class="dot" style="background:${HEX[p.color]}"></div>
-        <div class="who">${esc(p.name)}${i===S.mySeat?" (you)":""}</div>
+        <div class="who">${esc(p.name)}${p.bot?" (bot)":""}${i===S.mySeat?" (you)":""}</div>
         ${i===r.hostSeat?'<div class="hosttag">HOST</div>':""}
       </div>`).join("");
   if (r.players.length < 10){
@@ -1222,6 +1250,18 @@ function renderLobby(r){
   $("toknote").textContent = isHost
     ? "Big group? 2 or 3 tokens keeps the game shorter."
     : "The host picks this.";
+  const canTeam = r.players.length === 4;
+  $("botrow").innerHTML = isHost
+    ? `<button class="tokbtn" id="addBotBtn">&#129302; Add a bot</button>` +
+      (r.players.some(p=>p.bot) ? `<button class="tokbtn" id="delBotBtn">Remove bot</button>` : "")
+    : "";
+  $("teamrow").innerHTML =
+    `<button class="tokbtn teambtn${r.teamChoice?" on":""}${(isHost&&canTeam)?"":" na"}">&#128101; Team mode 2v2: ${r.teamChoice?"ON":"OFF"}</button>`;
+  $("teamnote").textContent = !canTeam
+    ? "Team mode needs 4 seats. Bots can fill empty ones (3 players auto-adds one at start)."
+    : (r.teamChoice
+        ? "Teams are drawn at RANDOM when the game starts. A team wins when BOTH partners get everything home. You can't capture your partner."
+        : (isHost ? "Play 2v2 with the player opposite you as your partner." : "The host picks this."));
   $("startBtn").classList.toggle("hidden", !isHost);
   $("waitmsg").classList.toggle("hidden", isHost);
   $("startBtn").disabled = r.players.length < 2;
@@ -1241,6 +1281,7 @@ function renderGame(r){
       <span class="pav">${p.avatar||""}</span>
       <div class="dot" style="background:${HEX[p.color]}"></div>
       <span>${esc(p.name)}${i===S.mySeat?" (you)":""}</span>
+      ${(r.teamMode&&r.teamOf)?`<span class="teamtag">T${r.teamOf[i]+1}</span>`:""}
       <span class="cnt">${home}/${r.cfg.tpp}</span>
       ${isTurn?"&#127922;":""}${!p.connected&&!p.left?'<span class="off">offline</span>':""}
     </div>`;
@@ -1280,7 +1321,12 @@ function renderGame(r){
   $("overbox").classList.toggle("hidden", r.status !== "over");
   if (r.status === "over"){
     const w = r.players.find(p=>p.color === r.winner);
-    $("winname").textContent = (w ? w.name : NICE[r.winner]) + " wins!";
+    if (r.winnerTeam){
+      const tn = r.winnerTeam.map(c=>{ const q = r.players.find(p=>p.color===c); return q ? q.name : NICE[c]; });
+      $("winname").textContent = tn.join(" & ") + " win!";
+    } else {
+      $("winname").textContent = (w ? w.name : NICE[r.winner]) + " wins!";
+    }
     $("winname").style.color = HEX[r.winner] || "#ffffff";
     const isHost = S.mySeat === r.hostSeat;
     $("rematchBtn").classList.toggle("hidden", !isHost);
@@ -1802,6 +1848,115 @@ document.addEventListener("pointerdown", (e)=>{
   b.appendChild(sp);
   setTimeout(()=>sp.remove(), 560);
 });
+/* ---------- in-room voice (browser-to-browser audio; server only passes notes) ---------- */
+const VOICE = { on:false, muted:false, stream:null, pcs:new Map(), els:new Map(), seats:[] };
+const RTC_CFG = { iceServers: [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] }] };
+function voiceSupported(){
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection && window.isSecureContext);
+}
+function renderVoice(r){
+  const bar = $("voicebar");
+  if (!bar) return;
+  const active = r && (r.status === "playing" || r.status === "over");
+  bar.classList.toggle("hidden", !active || !voiceSupported());
+  if (!active){ if (VOICE.on) leaveVoice(); return; }
+  VOICE.seats = r.voice || [];
+  if (VOICE.on && !VOICE.seats.includes(S.mySeat)) VOICE.seats = VOICE.seats.concat([S.mySeat]);
+  const btn = $("voiceBtn");
+  btn.classList.toggle("live", VOICE.on && !VOICE.muted);
+  btn.classList.toggle("muted", VOICE.on && VOICE.muted);
+  btn.innerHTML = !VOICE.on ? "&#127908; Join voice" : (VOICE.muted ? "&#128263; Unmute" : "&#127908; Mute");
+  $("voiceLeave").classList.toggle("hidden", !VOICE.on);
+  const others = VOICE.seats.filter(s=>s!==S.mySeat && r.players[s]);
+  const names = others.map(s=>r.players[s].name);
+  $("voicewho").textContent = VOICE.seats.length === 0
+    ? "Talk while you play."
+    : `${VOICE.seats.length} in voice${names.length ? ": " + names.join(", ") : ""}`;
+  if (VOICE.on) syncPeers();
+}
+async function joinVoice(){
+  try{
+    VOICE.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation:true, noiseSuppression:true } });
+  }catch(e){ toast("Voice needs microphone permission."); return; }
+  VOICE.on = true; VOICE.muted = false;
+  socket.emit("voice", { kind:"join" });
+  if (S && S.room) renderVoice(S.room);
+}
+function leaveVoice(){
+  VOICE.on = false; VOICE.muted = false;
+  socket.emit("voice", { kind:"leave" });
+  for (const [,pc] of VOICE.pcs){ try{ pc.close(); }catch(e){} }
+  VOICE.pcs.clear();
+  for (const [,el] of VOICE.els){ try{ el.remove(); }catch(e){} }
+  VOICE.els.clear();
+  if (VOICE.stream){ VOICE.stream.getTracks().forEach(t=>t.stop()); VOICE.stream = null; }
+}
+function toggleMute(){
+  VOICE.muted = !VOICE.muted;
+  if (VOICE.stream) VOICE.stream.getAudioTracks().forEach(t=>{ t.enabled = !VOICE.muted; });
+}
+$("voiceBtn").onclick = ()=>{ if (!VOICE.on) joinVoice(); else { toggleMute(); if (S && S.room) renderVoice(S.room); } };
+$("voiceLeave").onclick = (e)=>{ e.preventDefault(); leaveVoice(); if (S && S.room) renderVoice(S.room); };
+function pcFor(seat){
+  if (VOICE.pcs.has(seat)) return VOICE.pcs.get(seat);
+  const pc = new RTCPeerConnection(RTC_CFG);
+  VOICE.pcs.set(seat, pc);
+  if (VOICE.stream) VOICE.stream.getTracks().forEach(t=>pc.addTrack(t, VOICE.stream));
+  pc.onicecandidate = (e)=>{ if (e.candidate) socket.emit("voice", { kind:"signal", to:seat, data:{ ice:e.candidate } }); };
+  pc.ontrack = (e)=>{
+    let el = VOICE.els.get(seat);
+    if (!el){
+      el = document.createElement("audio");
+      el.className = "vpeer";
+      el.autoplay = true;
+      el.setAttribute("playsinline", "");
+      document.body.appendChild(el);
+      VOICE.els.set(seat, el);
+    }
+    el.srcObject = e.streams[0];
+    if (el.play) el.play().catch(()=>{});
+  };
+  return pc;
+}
+async function syncPeers(){
+  const targets = VOICE.seats.filter(s=>s!==S.mySeat);
+  for (const [seat, pc] of [...VOICE.pcs]){
+    if (!targets.includes(seat)){
+      try{ pc.close(); }catch(e){}
+      VOICE.pcs.delete(seat);
+      const el = VOICE.els.get(seat);
+      if (el){ el.remove(); VOICE.els.delete(seat); }
+    }
+  }
+  for (const seat of targets){
+    if (!VOICE.pcs.has(seat) && S.mySeat < seat){
+      const pc = pcFor(seat);
+      try{
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit("voice", { kind:"signal", to:seat, data:{ sdp: pc.localDescription } });
+      }catch(e){}
+    }
+  }
+}
+socket.on("voice", async (msg)=>{
+  if (!msg || msg.kind !== "signal" || !VOICE.on) return;
+  const pc = pcFor(msg.from);
+  const d = msg.data || {};
+  try{
+    if (d.sdp){
+      await pc.setRemoteDescription(d.sdp);
+      if (d.sdp.type === "offer"){
+        const ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        socket.emit("voice", { kind:"signal", to:msg.from, data:{ sdp: pc.localDescription } });
+      }
+    } else if (d.ice){
+      await pc.addIceCandidate(d.ice);
+    }
+  }catch(e){ /* signaling races resolve on the next roster sync */ }
+});
+
 </script>
 </body>
 </html>

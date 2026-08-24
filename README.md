@@ -38,3 +38,13 @@ Out of the box this works for everyone on your home Wi-Fi. For friends elsewhere
 - **Advanced SVG filters**: multi-octave grain, specular lighting (feSpecularLighting + point light), theme-aware shadows, pawn specular filter.
 - WebGL renderer removed after review: it replaced the detailed board with flat discs on most devices and lacked context-loss recovery. The SVG renderer (with performance fixes) is the single path.
 - Carries forward V4 pawn, hub, and cell polish. Gameplay/server rules are unchanged.
+
+
+## Team mode & in-room voice
+- **Team mode (2v2)**: host toggle in the lobby, available with exactly 4 players. Partners sit opposite (seats 1&3 vs 2&4). Teammates can't capture each other; a finished player sits out; the team wins when BOTH partners have every piece home.
+- **In-room voice**: a Join voice button appears during the game (HTTPS only). Audio flows browser-to-browser via WebRTC with public STUN; the server only relays signaling over the existing socket. Mute/leave controls included. No TURN relay, so pairs behind strict carrier NAT may not connect — known tradeoff.
+
+## Bots & random teams
+- **Add a bot** (lobby, host only): server-driven player that rolls and moves on its own — prefers captures, then finishing, then leaving base. Remove with one tap. Rooms never survive on bots alone.
+- **Auto-fill**: starting team mode with 3 players adds one bot automatically so teams stay even.
+- **Random teams**: partners are drawn fresh at every game start (and every rematch) — announced in the game log and shown as T1/T2 badges.
