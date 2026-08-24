@@ -1,0 +1,13 @@
+services:
+  ludo:
+    image: node:20-alpine
+    container_name: ludo-rooms
+    working_dir: /app
+    # IMPORTANT: change the left side to the real path of this folder on YOUR NAS.
+    # Find it in the UGOS File Manager (it usually starts with /volume1/...).
+    volumes:
+      - /volume1/docker/ludo-rooms:/app
+    command: sh -c "npm install --omit=dev --no-audit --no-fund && node server.js"
+    ports:
+      - "8090:3000"
+    restart: unless-stopped
