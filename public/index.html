@@ -123,6 +123,7 @@
   .tokbtn.na{ cursor:default; opacity:.55; }
   .setnote{ font-size:12px; color:var(--mut); font-weight:600; margin-top:7px; }
   .dot{ width:12px; height:12px; border-radius:50%; box-shadow:0 0 6px currentColor; flex-shrink:0; }
+  #game{ width:100%; max-width:472px; display:flex; flex-direction:column; align-items:center; }
   .pills{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:10px; max-width:472px; }
   .pill{
     display:flex; align-items:center; gap:6px; padding:6px 11px; border-radius:999px;
@@ -197,6 +198,10 @@
     border:1px solid var(--glassbd); border-radius:18px;
     box-shadow:0 18px 40px rgba(0,0,0,.45); overflow:hidden;
   }
+  /* wider game column on tablets/desktop; must sit after the 472px rules above */
+  @media (min-width:600px){
+    #game, .pills, .woodframe, .panel, .chatcard{ max-width:640px; }
+  }
   .chattoggle{
     width:100%; padding:12px 15px; font-size:15px; font-weight:800; border:none; background:transparent;
     color:var(--txt); font-family:inherit; cursor:pointer; text-align:left; display:flex; align-items:center; gap:8px;
@@ -231,14 +236,14 @@
     box-shadow:0 8px 18px rgba(91,140,255,.45); font-family:inherit;
   }
   .mutebtn,.themebtn{
-    position:fixed; top:12px; z-index:40; width:42px; height:42px; border-radius:50%;
+    position:fixed; top:12px; z-index:40; width:44px; height:44px; border-radius:50%;
     border:1px solid rgba(255,255,255,.16); background:rgba(20,24,48,.8);
     backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
     font-size:18px; cursor:pointer; box-shadow:0 8px 20px rgba(0,0,0,.4); font-family:inherit;
     display:flex; align-items:center; justify-content:center;
   }
   .mutebtn{ right:12px; }
-  .themebtn{ right:60px; }
+  .themebtn{ right:62px; }
   .confetti{ position:fixed; inset:0; pointer-events:none; z-index:60; overflow:hidden; }
   .confetti i{ position:absolute; top:-14px; width:10px; height:14px; border-radius:2px; animation:fall linear forwards; }
   @keyframes fall{ to{ transform:translateY(112vh) rotate(720deg); } }
@@ -768,7 +773,7 @@ html[data-theme="dark"] #boardwrap::after{
   <button id="leaveLobbyBtn" class="btn small plain" style="width:100%">Leave room</button>
 </div>
 
-<div id="game" class="hidden" style="width:100%;max-width:472px;display:flex;flex-direction:column;align-items:center;">
+<div id="game" class="hidden">
   <div class="wordmark small"><span class="r">L</span><span class="g">U</span><span class="y">D</span><span class="b">O</span> ROOMS<span id="roomtag" class="roomtag"></span></div>
   <div id="pills" class="pills"></div>
   <div class="woodframe">
@@ -1686,6 +1691,31 @@ function tokensSVG(r, cfg){
   const mc = myColor();
   const finish = cfg.M + 4;
   const baseR = cfg.mode === "cross" ? 14 : Math.max(9, circCellR(cfg.M));
+  /* Circle boards: pieces are small, so movable ones get a bigger invisible tap
+     zone (35 units ≈ 32px on a 390px-wide phone), shrunk to half the gap to the
+     nearest other movable piece on a different cell so two zones never overlap
+     and steal taps. Same-position pairs are exempt: their moves are identical,
+     so a "stolen" tap changes nothing. */
+  let circleHitR = null;
+  if (cfg.mode !== "cross" && mine.length){
+    const picks = [];
+    for (const g of Object.values(groups)){
+      g.forEach((t, gi)=>{
+        if (t.c !== mc || !mine.includes(t.i)) return;
+        const off = g.length > 1 ? OFF[Math.min(gi,4)] : [0,0];
+        picks.push({ i:t.i, x:t.x+off[0], y:t.y+off[1], pos:t.pos });
+      });
+    }
+    circleHitR = (i)=>{
+      const p0 = picks.find(p=>p.i===i);
+      let r = 35;
+      for (const p of picks){
+        if (p.i === i || p.pos === p0.pos) continue;
+        r = Math.min(r, Math.hypot(p.x-p0.x, p.y-p0.y)/2 - 1);
+      }
+      return Math.max(baseR, r);
+    };
+  }
   const pieces = [];
   for (const g of Object.values(groups)){
     g.forEach((t, gi)=>{
@@ -1700,7 +1730,7 @@ function tokensSVG(r, cfg){
       } else {
         s += pawnSVG(x, y, rad, t.c, canPick);
       }
-      if (canPick) s += `<circle cx="${x}" cy="${y - rad*0.6}" r="${rad+14}" fill="transparent"/>`;
+      if (canPick) s += `<circle cx="${x}" cy="${y - rad*0.6}" r="${circleHitR ? circleHitR(t.i) : rad+14}" fill="transparent"/>`;
       s += `</g>`;
       pieces.push({ y: y, s: s });
     });

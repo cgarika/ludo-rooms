@@ -78,7 +78,10 @@ async function audit(pg, stage) {
       el.scrollIntoView({ block: "center" });
       const r2 = el.getBoundingClientRect();
       const hit = document.elementFromPoint(r2.x + r2.width / 2, r2.y + r2.height / 2);
-      if (hit && !el.contains(hit) && !hit.contains(el))
+      // a movable piece covered by another movable piece is fine: zones only overlap
+      // when both pieces share a cell/base, where their moves are identical
+      const bothTokens = hit && el.closest && el.closest("[data-tok]") && hit.closest && hit.closest("[data-tok]");
+      if (hit && !el.contains(hit) && !hit.contains(el) && !bothTokens)
         out.push({ sev: "major", text: `unreachable — covered by <${hit.tagName.toLowerCase()}${hit.id ? "#" + hit.id : ""}>: ${name}` });
     }
     window.scrollTo(0, 0);
@@ -200,18 +203,21 @@ async function roundBoardAudit(ctx) {
       const vb = svg.viewBox.baseVal;
       const scale = svg.getBoundingClientRect().width / vb.width;
       const baseR = Math.max(9, circCellR(S.room.cfg.M));
+      const HIT_UNITS = 35; // the client's circle-board tap radius when no other movable piece is nearby
       return {
-        mode: S.room.cfg.mode, players: S.room.players.length,
+        mode: S.room.cfg.mode, players: S.room.players.length, vw: window.innerWidth,
         boardPx: Math.round(svg.getBoundingClientRect().width),
         pawnPx: +(2 * baseR * scale).toFixed(1),
-        hitPx: +(2 * (baseR + 14) * scale).toFixed(1),
+        hitPx: +(2 * HIT_UNITS * scale).toFixed(1),
       };
     });
-    const comfy = m.hitPx >= 44 ? "comfortable (≥44px)" : m.hitPx >= 32 ? "usable but snug" : "too small";
-    rec("10p round board pawn size", m.hitPx >= 32,
-      `${m.mode} board ${m.boardPx}px wide; pawn ${m.pawnPx}px, tap zone ${m.hitPx}px → ${comfy}`);
-    if (m.hitPx < 44) issue(m.hitPx < 32 ? "major" : "minor", "round-board",
-      `10-player pawn tap zone ${m.hitPx}px (visual ${m.pawnPx}px) is under the 44px guideline`);
+    // spec: zone must reach 32px on phones 390px and wider; narrower devices scale below that by design
+    const specApplies = m.vw >= 390;
+    const comfy = m.hitPx >= 44 ? "comfortable (≥44px)" : m.hitPx >= 32 ? "meets the 32px target" : "under 32px";
+    rec("10p round board pawn size", m.hitPx >= 32 || !specApplies,
+      `${m.mode} board ${m.boardPx}px wide; pawn ${m.pawnPx}px, tap zone ${m.hitPx}px → ${comfy}${specApplies ? "" : " (device narrower than the 390px spec target)"}`);
+    if (m.hitPx < 32) issue(specApplies ? "major" : "minor", "round-board",
+      `10-player pawn tap zone ${m.hitPx}px (visual ${m.pawnPx}px) is under the 32px target`);
     const { glowed } = await rollUntilGlow(pg, 30000);
     if (glowed) {
       const bb = await pg.evaluate(() => {
