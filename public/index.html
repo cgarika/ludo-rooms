@@ -1093,6 +1093,7 @@ $("tokrow").addEventListener("click", (e)=>{
   const b = e.target.closest("[data-t]");
   if (!b || !S || S.room.status !== "lobby" || S.mySeat !== S.room.hostSeat) return;
   socket.emit("settings", { tokens: Number(b.getAttribute("data-t")) });
+});
 $("teamrow").addEventListener("click", ()=>{
   const b = document.querySelector("#teamrow .teambtn");
   if (!b || b.classList.contains("na")) return;
@@ -1101,7 +1102,6 @@ $("teamrow").addEventListener("click", ()=>{
 $("botrow").addEventListener("click", (e)=>{
   if (e.target.closest("#addBotBtn")) socket.emit("addBot");
   else if (e.target.closest("#delBotBtn")) socket.emit("removeBot");
-});
 });
 
 /* chat wiring */
