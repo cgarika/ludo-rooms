@@ -448,6 +448,30 @@ input:focus{
   opacity:.7; pointer-events:none;
 }
 #boardwrap{ position:relative; z-index:1; }
+.woodframe{ position:relative; }
+#dicehub{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); z-index:6;
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+  background:rgba(13,16,36,.66); backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.18); border-radius:18px; padding:10px 12px;
+  box-shadow:0 10px 26px rgba(0,0,0,.45); pointer-events:none; }
+#dicehub #die, #dicehub #rollBtn{ pointer-events:auto; }
+@keyframes jshake{ 0%,100%{transform:translate(0,0)} 20%{transform:translate(-6px,2px)} 40%{transform:translate(5px,-3px)} 60%{transform:translate(-4px,-2px)} 80%{transform:translate(3px,2px)} }
+.jshake{ animation:jshake .38s ease; }
+#dicehub #rollBtn{ font-size:14.5px; }
+#die{ background:transparent !important; box-shadow:none !important; border:none !important;
+  perspective:300px; width:64px; height:64px; }
+#die::before, #die::after{ display:none !important; }
+#die.spin{ animation:none !important; }
+#die .cube{ width:46px; height:46px; margin:9px; position:relative; transform-style:preserve-3d;
+  transform:rotateX(-22deg) rotateY(32deg); transition:transform .9s cubic-bezier(.2,.8,.25,1); will-change:transform; }
+#die .cface{ position:absolute; width:46px; height:46px; border-radius:10px;
+  background:linear-gradient(145deg,#ffffff,#dfe3f7); border:1.5px solid rgba(0,0,0,.08);
+  box-shadow:inset 0 3px 4px rgba(255,255,255,.9), inset 0 -4px 5px rgba(70,80,140,.28); }
+#die .cface .cpip{ position:absolute; width:9px; height:9px; border-radius:50%;
+  background:radial-gradient(circle at 34% 28%, #4a5180, #14172f 70%); transform:translate(-50%,-50%); }
+#die .cf1{ transform:rotateY(0deg) translateZ(23px); } #die .cf2{ transform:rotateY(90deg) translateZ(23px); }
+#die .cf3{ transform:rotateX(90deg) translateZ(23px); } #die .cf4{ transform:rotateX(-90deg) translateZ(23px); }
+#die .cf5{ transform:rotateY(-90deg) translateZ(23px); } #die .cf6{ transform:rotateY(180deg) translateZ(23px); }
 #boardwrap svg{
   border-radius:18px;
   background:linear-gradient(180deg,#fff 0%,#f1f2fa 100%);
@@ -729,6 +753,7 @@ html[data-theme="dark"] #boardwrap::after{
   #voiceBtn.live{ background:linear-gradient(180deg,#3ee68b,#1eb567); color:#fff; border:none; box-shadow:0 6px 16px rgba(51,209,122,.4); }
   #voiceBtn.muted{ background:linear-gradient(180deg,#ff7a7a,#e84040); color:#fff; border:none; box-shadow:0 6px 16px rgba(232,64,64,.4); }
   audio.vpeer{ display:none; }
+  @media (prefers-reduced-motion:no-preference){ .btn, .pill, .hcard, .tile, .entry, .cube{ will-change:transform; } }
 </style>
 </head>
 <body>
@@ -786,12 +811,14 @@ html[data-theme="dark"] #boardwrap::after{
   <div class="woodframe">
     <div id="boardwrap"></div>
     <div id="stickerfly"></div>
+    <div id="dicehub">
+      <div id="die"></div>
+      <button id="rollBtn" class="btn yellow hidden" style="width:auto;padding:11px 22px;">ROLL</button>
+    </div>
   </div>
   <div class="panel" id="panel">
     <div id="log"></div>
     <div id="diceline" class="diceline">
-      <div id="die"></div>
-      <button id="rollBtn" class="btn yellow hidden" style="width:auto;padding:13px 26px;">ROLL</button>
       <div id="turninfo" class="turninfo"></div>
     </div>
     <div id="timerline" class="timer"></div>
@@ -1381,6 +1408,7 @@ async function runMoveAnim(r){
       const [fx, fy] = tokenXY(lm.color, lm.to, lm.i, r.cfg);
       boardBurst(fx,fy,HEX[lm.color],"capture");
       snd("capture");
+      { const w=document.querySelector(".woodframe"); if(w){ w.classList.remove("jshake"); void w.offsetWidth; w.classList.add("jshake"); } }
       await sleep(360);
     }
   }catch(e){}
@@ -1442,11 +1470,25 @@ function drawDie(){
   if (Date.now() < animUntil) return;
   paintDie(S && S.room.die ? S.room.die : null);
 }
-function paintDie(v){
+const CUBE_FINAL={1:[0,0],2:[0,-90],3:[-90,0],4:[90,0],5:[0,90],6:[0,180]};
+let cubeSpins=0;
+function ensureCube(){
   const die = $("die");
-  if (!v){ die.innerHTML = '<div class="q">?</div>'; return; }
-  die.innerHTML = (PIPS[v]||[]).map(p=>
-    `<div class="pip" style="left:calc(${p[0]}% - 5.5px);top:calc(${p[1]}% - 5.5px)"></div>`).join("");
+  let cube = die.querySelector(".cube");
+  if (!cube){
+    die.innerHTML = '<div class="cube">' + [1,2,3,4,5,6].map(f=>
+      `<div class="cface cf${f}">${(PIPS[f]||[]).map(p=>`<i class="cpip" style="left:${p[0]}%;top:${p[1]}%"></i>`).join("")}</div>`
+    ).join("") + '</div>';
+    cube = die.querySelector(".cube");
+  }
+  return cube;
+}
+function paintDie(v){
+  const cube = ensureCube();
+  if (!v){ cube.style.transform = "rotateX(-22deg) rotateY(32deg)"; return; }
+  cubeSpins++;
+  const f = CUBE_FINAL[v] || [0,0];
+  cube.style.transform = `rotateX(${f[0]-22+360*cubeSpins}deg) rotateY(${f[1]+32+360*(cubeSpins+1)}deg)`;
 }
 
 
