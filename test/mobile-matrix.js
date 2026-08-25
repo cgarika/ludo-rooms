@@ -1,5 +1,5 @@
 /* Mobile device-matrix suite (Playwright) against the LIVE deployment.
-   Run from test/:  node mobile-matrix.js     (BASE=https://needasix.com by default)
+   Run from test/:  node mobile-matrix.js     (BASE=https://needasix.com/ludo by default)
    Screenshots + mobile-results.json land in $SHOTS or test/shots-mobile.
 
    - iPhones/iPads run on WebKit (Safari engine), Androids on Chromium.
@@ -14,7 +14,7 @@
 */
 const { chromium, webkit, devices } = require("playwright");
 const fs = require("fs");
-const BASE = process.env.BASE || "https://needasix.com";
+const BASE = process.env.BASE || "https://needasix.com/ludo";
 const SHOTS = process.env.SHOTS || __dirname + "/shots-mobile";
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -267,7 +267,7 @@ async function landscapeFlow(ctx) {
     curDev = dev.name;
     console.log(`\n▶ ${dev.name} (${dev.engine}${dev.primary ? ", PRIMARY" : ""}) — ${JSON.stringify(devices[dev.name].viewport)}`);
     const ctx = await browsers[dev.engine].newContext({ ...devices[dev.name], reducedMotion: "reduce" });
-    await ctx.grantPermissions(["microphone"], { origin: BASE });
+    await ctx.grantPermissions(["microphone"], { origin: new URL(BASE).origin });
     const pg = await ctx.newPage();
     pg.on("pageerror", (e) => { rec("page JS error", false, e.message.split("\n")[0]); issue("major", "runtime", "JS error: " + e.message.split("\n")[0]); });
     try { await fullFlow(pg); } catch (e) { rec("flow aborted", false, e.message.split("\n")[0]); }

@@ -33,7 +33,7 @@ finisher, winnerTeam sanity), and randomness of team draws across 12 games.
 Playwright (Chromium) against the **live** site. Creates throwaway rooms.
 
 ```sh
-node test/ui-test.js             # BASE=https://needasix.com by default
+node test/ui-test.js             # BASE=https://needasix.com/ludo by default
 BASE=http://localhost:3111 node test/ui-test.js   # or point it anywhere
 ```
 

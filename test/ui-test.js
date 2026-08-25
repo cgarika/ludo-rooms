@@ -1,5 +1,5 @@
 /* Browser-level UI suite (Playwright) against the LIVE deployment.
-   Run from test/:  node ui-test.js        (BASE=https://needasix.com by default)
+   Run from test/:  node ui-test.js        (BASE=https://needasix.com/ludo by default)
    Screenshots land in $SHOTS or test/shots.
 
    Covers:
@@ -11,7 +11,7 @@
 */
 const { chromium, devices } = require("playwright");
 const fs = require("fs");
-const BASE = process.env.BASE || "https://needasix.com";
+const BASE = process.env.BASE || "https://needasix.com/ludo";
 const SHOTS = process.env.SHOTS || __dirname + "/shots";
 fs.mkdirSync(SHOTS, { recursive: true });
 
@@ -37,7 +37,7 @@ async function test(title, fn) {
 
   const mkPage = async (name, ctxOpts = {}, { mic = false } = {}) => {
     const ctx = await browser.newContext({ viewport: { width: 900, height: 900 }, reducedMotion: "reduce", ...ctxOpts });
-    if (mic) await ctx.grantPermissions(["microphone"], { origin: BASE });
+    if (mic) await ctx.grantPermissions(["microphone"], { origin: new URL(BASE).origin });
     const pg = await ctx.newPage();
     pg.on("pageerror", (e) => bad(`${name} JS error: ${e.message}`));
     pg._name = name;
