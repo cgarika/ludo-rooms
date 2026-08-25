@@ -257,6 +257,12 @@
   }
   #toast.show{ opacity:1; }
   .hidden{ display:none !important; }
+  .arcadelink{ display:inline-flex; align-items:center; gap:6px; margin-top:10px;
+    font-size:12.5px; font-weight:800; letter-spacing:.05em; color:var(--mut);
+    text-decoration:none; border:1px solid rgba(255,255,255,.14); border-radius:999px;
+    padding:7px 14px; background:rgba(255,255,255,.04); }
+  .arcadelink:hover{ color:var(--txt); border-color:rgba(255,255,255,.3); }
+
   .mt10{ margin-top:10px; } .mt12{ margin-top:12px; } .mt18{ margin-top:18px; }
   @media (prefers-reduced-motion: reduce){
     #die.spin, #rollBtn, .fe, #overbox .cup{ animation:none; }
@@ -733,6 +739,7 @@ html[data-theme="dark"] #boardwrap::after{
 <div id="head">
   <div class="wordmark"><span class="r">L</span><span class="g">U</span><span class="y">D</span><span class="b">O</span> ROOMS</div>
   <div class="tagline">Share a code. Play with 2 to 10 friends. Zero ads.</div>
+  <a class="arcadelink" href="/">&#9666; all games &middot; needasix arcade</a>
 </div>
 
 <div id="home" class="card">
@@ -793,6 +800,7 @@ html[data-theme="dark"] #boardwrap::after{
       <div id="winname" class="wname"></div>
       <div class="mt12"></div>
       <button id="rematchBtn" class="btn green hidden">Rematch</button>
+      <div><a class="arcadelink" href="/">&#9666; more games at the arcade</a></div>
       <div id="rematchWait" class="hidden" style="font-weight:700;color:var(--mut);font-size:14px;">Host can start a rematch.</div>
     </div>
     <div id="voicebar" class="voicebar hidden">
@@ -1032,6 +1040,7 @@ if (window.matchMedia){
 /* ---------- client state ---------- */
 const APP_BASE = location.pathname.replace(/\/[^\/]*$/, "");
 const socket = io({ path: APP_BASE + "/socket.io" });
+if (APP_BASE === "") document.querySelectorAll(".arcadelink").forEach((a)=>{ a.style.display = "none"; });
 let S = null;
 let animUntil = 0, animT = null;
 let lastAutoV = 0, lastMoveAnimV = 0, animRunning = false;
