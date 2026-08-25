@@ -2,12 +2,12 @@
   "name": "Ludo Rooms",
   "short_name": "Ludo Rooms",
   "description": "Play Ludo with 2-10 friends. Share a code, no ads.",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#14182a",
   "theme_color": "#14182a",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

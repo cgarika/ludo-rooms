@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ludo Rooms</title>
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#14182a">
 <link rel="icon" href="/icon-192.png">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Ludo Rooms">
@@ -826,7 +826,7 @@ html[data-theme="dark"] #boardwrap::after{
 
 <div id="toast"></div>
 
-<script src="/socket.io/socket.io.js"></script>
+<script src="socket.io/socket.io.js"></script>
 <script>
 /* ---------- colors, avatars, stickers ---------- */
 const HEX = {
@@ -1030,7 +1030,8 @@ if (window.matchMedia){
 }
 
 /* ---------- client state ---------- */
-const socket = io();
+const APP_BASE = location.pathname.replace(/\/[^\/]*$/, "");
+const socket = io({ path: APP_BASE + "/socket.io" });
 let S = null;
 let animUntil = 0, animT = null;
 let lastAutoV = 0, lastMoveAnimV = 0, animRunning = false;

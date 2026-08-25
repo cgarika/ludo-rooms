@@ -12,8 +12,10 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
-app.use(express.static(path.join(__dirname, "public")));
+const BASE = (process.env.BASE_PATH || "").replace(/\/$/, "");
+const io = new Server(server, { path: BASE + "/socket.io" });
+if (BASE) app.use((req, res, next) => { if (req.path === BASE) return res.redirect(301, BASE + "/"); next(); });
+app.use(BASE || "/", express.static(path.join(__dirname, "public")));
 
 const PORT = process.env.PORT || 3000;
 const ROOM_IDLE_MS = 2 * 3600e3;
