@@ -31,7 +31,7 @@
   html[data-theme="nest"]{
     /* GameNest dark-glass: jewel purple plate, frosted white cells, gold trim */
     --board-bg-0:#1c1440; --board-bg-1:#120d2e; --board-bg-2:#0a071f;
-    --board-cell:#f3f1ff; --board-cell-edge:#c6c0e6; --board-edge-hi:rgba(255,205,60,.5);
+    --board-cell:#f8f4ea; --board-cell-edge:rgba(128,92,44,.55); --board-edge-hi:rgba(255,205,60,.5);
     --board-text:#ffd666; --board-hub-rim:#ffcd3c; --board-safe-star:#ffd24a;
     --board-pad:#ffffff; --board-vignette:rgba(0,0,0,.42);
     --board-mode: dark;
@@ -1748,6 +1748,23 @@ function cssVar(name, fallback){
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
+function lighten(hex, f){
+  const n = parseInt(hex.slice(1), 16), r = n>>16, g = (n>>8)&255, b = n&255;
+  const m = (v)=> Math.round(v + (255-v)*f);
+  return "#" + [m(r), m(g), m(b)].map(v=> v.toString(16).padStart(2,"0")).join("");
+}
+/* one track cell: base + frosted bevel highlight + a thin warm edge (nest) — shared by both boards */
+function trackCell(x, y, w, h, rx, fill, edge, rot){
+  const nest = isNestBoard();
+  const stroke = edge === null ? "" : ` stroke="${edge}" stroke-width="${nest?1.15:1}"`;
+  const tf = rot !== undefined ? ` transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)})"` : "";
+  const bx = rot !== undefined ? -w/2 : x, by = rot !== undefined ? -h/2 : y;
+  let o = `<g${tf}>`;
+  o += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="${rx}" fill="${fill}"${stroke}/>`;
+  o += `<rect x="${(bx+1.5).toFixed(1)}" y="${(by+1.2).toFixed(1)}" width="${(w-3).toFixed(1)}" height="${(h*0.46).toFixed(1)}" rx="${Math.max(2, rx-2)}" fill="url(#cellBevel)"/>`;
+  if (nest) o += `<rect x="${(bx+2).toFixed(1)}" y="${(by+h-2.6).toFixed(1)}" width="${(w-4).toFixed(1)}" height="1.4" rx=".7" fill="#4a3010" opacity=".14"/>`;
+  return o + `</g>`;
+}
 function defsSVG(colors){
   const dark = isDarkBoard();
   const nest = isNestBoard();
@@ -1776,10 +1793,10 @@ function defsSVG(colors){
          `<stop offset="72%" stop-color="${HEX[c]}"/>`+
          `<stop offset="100%" stop-color="${DARKHEX[c]}"/></radialGradient>`;
     d += `<linearGradient id="b_${c}" x1="0%" y1="0%" x2="100%" y2="100%">`+
-         `<stop offset="0%" stop-color="#ffffff" stop-opacity="${dark?0.18:0.32}"/>`+
-         `<stop offset="18%" stop-color="${HEX[c]}"/>`+
+         `<stop offset="0%" stop-color="#ffffff" stop-opacity="${nest?0.5:dark?0.18:0.32}"/>`+
+         `<stop offset="18%" stop-color="${nest?lighten(HEX[c],0.22):HEX[c]}"/>`+
          `<stop offset="58%" stop-color="${HEX[c]}"/>`+
-         `<stop offset="100%" stop-color="${DARKHEX[c]}"/></linearGradient>`;
+         `<stop offset="100%" stop-color="${nest?HEX[c]:DARKHEX[c]}"/></linearGradient>`;
     d += `<linearGradient id="v_${c}" x1="0%" y1="0%" x2="0%" y2="100%">`+
          `<stop offset="0%" stop-color="#ffffff" stop-opacity="${dark?0.16:0.28}"/>`+
          `<stop offset="18%" stop-color="${HEX[c]}"/>`+
@@ -1828,8 +1845,11 @@ function defsSVG(colors){
        `<feComposite in="spec" in2="textured" operator="arithmetic" k1="0" k2="1" k3="0.22" k4="0"/>`)+
        `</filter>`;
   d += `<linearGradient id="cellWhite" x1="0" y1="0" x2="0" y2="1">`+
-       `<stop offset="0%" stop-color="${nest?"#ffffff":dark?"#2a3150":"#ffffff"}"/><stop offset="55%" stop-color="${cell}"/>`+
-       `<stop offset="100%" stop-color="${nest?"#dcd8f2":dark?"#151a2e":"#e6e8f3"}"/></linearGradient>`;
+       `<stop offset="0%" stop-color="${nest?"#fffefa":dark?"#2a3150":"#ffffff"}"/><stop offset="55%" stop-color="${cell}"/>`+
+       `<stop offset="100%" stop-color="${nest?"#ebe3d0":dark?"#151a2e":"#e6e8f3"}"/></linearGradient>`;
+  /* frosted bevel: soft top highlight that fades out, used on every track cell */
+  d += `<linearGradient id="cellBevel" x1="0" y1="0" x2="0" y2="1">`+
+       `<stop offset="0%" stop-color="#ffffff" stop-opacity="${nest?0.7:0.35}"/><stop offset="100%" stop-color="#ffffff" stop-opacity="0"/></linearGradient>`;
   /* polygon plate: a shade lighter than the wallpaper so the N-gon reads as a slab */
   d += `<linearGradient id="plateFill" x1="0" y1="0" x2="1" y2="1">`+
        `<stop offset="0%" stop-color="${nest?"#2f2566":dark?"#232948":"#ffffff"}"/><stop offset="55%" stop-color="${nest?"#1d1646":dark?"#1a1f38":"#f3f4fa"}"/>`+
@@ -1998,18 +2018,18 @@ function drawBoard(r, force){
   }
   TRACK.forEach((cr, absIdx)=>{
     const startColor = ["red","green","yellow","blue"].find(c=>C_START[c] === absIdx);
-    s += `<rect x="${cr[0]*CELL+1.5}" y="${cr[1]*CELL+1.5}" width="${CELL-3}" height="${CELL-3}" rx="8" fill="${startColor?`url(#b_${startColor})`:"url(#cellWhite)"}" stroke="${startColor?"none":"#dcdcec"}" stroke-width="1"/>`;
+    s += trackCell(cr[0]*CELL+1.5, cr[1]*CELL+1.5, CELL-3, CELL-3, 8, startColor?`url(#b_${startColor})`:"url(#cellWhite)", startColor ? (isNestBoard() ? "rgba(70,40,10,.35)" : null) : cssVar("--board-cell-edge", "#dcdcec"));
     if (startColor){
       /* start arrow along the direction of travel */
       const rot = { red:90, green:180, yellow:270, blue:0 }[startColor];
-      s += `<path d="M -7.5 4.5 L 0 -8 L 7.5 4.5 Z" transform="translate(${cr[0]*CELL+CELL/2} ${cr[1]*CELL+CELL/2}) rotate(${rot})" fill="#ffffff" opacity=".92"/>`;
+      s += `<path d="M -7.5 4.5 L 0 -8 L 7.5 4.5 Z" transform="translate(${cr[0]*CELL+CELL/2} ${cr[1]*CELL+CELL/2}) rotate(${rot})" fill="#ffffff" stroke="#3a2408" stroke-opacity=".55" stroke-width="1.2" stroke-linejoin="round" paint-order="stroke" opacity=".95"/>`;
     } else if (C_SAFE.has(absIdx)){
-      s += `<text x="${cr[0]*CELL+CELL/2}" y="${cr[1]*CELL+CELL/2+7}" text-anchor="middle" font-size="20" fill="url(#starGold)" filter="url(#safeGlow)">\u2605</text>`;
+      s += `<text x="${cr[0]*CELL+CELL/2}" y="${cr[1]*CELL+CELL/2+7}" text-anchor="middle" font-size="20" fill="url(#starGold)" stroke="#5a3a00" stroke-opacity=".7" stroke-width="1" paint-order="stroke" filter="url(#safeGlow)">\u2605</text>`;
     }
   });
   for (const c of ["red","green","yellow","blue"]){
     for (const cr of HOME_PATH[c]){
-      s += `<rect x="${cr[0]*CELL+1.5}" y="${cr[1]*CELL+1.5}" width="${CELL-3}" height="${CELL-3}" rx="8" fill="url(#b_${c})" opacity="0.97"/>`;
+      s += trackCell(cr[0]*CELL+1.5, cr[1]*CELL+1.5, CELL-3, CELL-3, 8, `url(#b_${c})`, isNestBoard() ? "rgba(70,40,10,.35)" : null);
     }
   }
   /* center hub - ornate */
@@ -2044,8 +2064,7 @@ function polyPath(pts, rr){
   return d + "Z";
 }
 function cellRect(x, y, size, rot, fill, stroke){
-  const h = size/2;
-  return `<rect x="${(-h).toFixed(1)}" y="${(-h).toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="${(size*0.22).toFixed(1)}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)})" fill="${fill}"${stroke?` stroke="${stroke}" stroke-width="1"`:""}/>`;
+  return trackCell(x, y, size, size, size*0.22, fill, stroke === undefined ? null : stroke, rot);
 }
 function drawCircleBoard(r, cfg){ drawPolyBoard(r, cfg); }   // legacy name: 5-10 players now get the N-arm polygon board
 function drawPolyBoard(r, cfg){
@@ -2088,19 +2107,19 @@ function drawPolyBoard(r, cfg){
   for (const c of colors){
     for (let i = 0; i < 3; i++){
       const [lx, ly] = G.lane[c][i];
-      s += cellRect(lx, ly, cellSz, G.cellRot[cfg.starts[c]], `url(#b_${c})`);
+      s += cellRect(lx, ly, cellSz, G.cellRot[cfg.starts[c]], `url(#b_${c})`, nest ? "rgba(70,40,10,.35)" : null);
     }
   }
   /* ring cells */
   for (let a = 0; a < M; a++){
     const [x, y] = G.cell[a], oc = startOf[a];
-    s += cellRect(x, y, cellSz, G.cellRot[a], oc ? `url(#b_${oc})` : "url(#cellWhite)", oc ? null : cellEdge);
+    s += cellRect(x, y, cellSz, G.cellRot[a], oc ? `url(#b_${oc})` : "url(#cellWhite)", oc ? (nest ? "rgba(70,40,10,.35)" : null) : cellEdge);
     if (oc){
       /* start arrow: points inward along the direction of travel (toward the hub) */
       const rot = G.cellRot[a] + 180;   // cellRot is axis+90 (outward = "up" in cell space) → +180 flips to inward
-      s += `<path d="M -${(d*0.19).toFixed(1)} ${(d*0.12).toFixed(1)} L 0 -${(d*0.2).toFixed(1)} L ${(d*0.19).toFixed(1)} ${(d*0.12).toFixed(1)} Z" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)})" fill="#ffffff" opacity=".92"/>`;
+      s += `<path d="M -${(d*0.19).toFixed(1)} ${(d*0.12).toFixed(1)} L 0 -${(d*0.2).toFixed(1)} L ${(d*0.19).toFixed(1)} ${(d*0.12).toFixed(1)} Z" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)})" fill="#ffffff" stroke="#3a2408" stroke-opacity=".55" stroke-width="1" stroke-linejoin="round" paint-order="stroke" opacity=".95"/>`;
     } else if (safeSet.has(a)){
-      s += `<text x="${x.toFixed(1)}" y="${(y + d*0.19).toFixed(1)}" text-anchor="middle" font-size="${(d*0.62).toFixed(1)}" fill="url(#starGold)" filter="url(#safeGlow)">★</text>`;
+      s += `<text x="${x.toFixed(1)}" y="${(y + d*0.19).toFixed(1)}" text-anchor="middle" font-size="${(d*0.62).toFixed(1)}" fill="url(#starGold)" stroke="#5a3a00" stroke-opacity=".7" stroke-width=".9" paint-order="stroke" filter="url(#safeGlow)">★</text>`;
     }
   }
   /* hub: N-gon with one colored wedge per arm, gold centre under the die */
