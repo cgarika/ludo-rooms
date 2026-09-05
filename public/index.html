@@ -2064,7 +2064,7 @@ function drawPolyBoard(r, cfg){
   s += defsSVG(colors);
   /* jewel plate around the board; the N-gon and everything on it are scaled into the plate's parchment inner */
   s += `<rect x="0" y="0" width="${CSZ}" height="${CSZ}" rx="18" fill="url(#boardSurface)"/>`;
-  s += `<image href="art/plate.jpg" x="${G.plate.img.x.toFixed(1)}" y="${G.plate.img.x.toFixed(1)}" width="${G.plate.img.size.toFixed(1)}" height="${G.plate.img.size.toFixed(1)}" preserveAspectRatio="none"/>`;
+  s += `<image href="art/plate.jpg?v=2" x="${G.plate.img.x.toFixed(1)}" y="${G.plate.img.x.toFixed(1)}" width="${G.plate.img.size.toFixed(1)}" height="${G.plate.img.size.toFixed(1)}" preserveAspectRatio="none"/>`;
   s += `<g transform="${G.plate.xform}">`;
   const plate = polyPath(G.platePts, d*0.9);
   s += `<path d="${plate}" fill="url(#plateFill)" filter="url(#softS)"/>`;
