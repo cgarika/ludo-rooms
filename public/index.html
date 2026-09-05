@@ -28,6 +28,14 @@
     --board-pad:#222844; --board-vignette:rgba(0,0,0,.35);
     --board-mode: dark;
   }
+  html[data-theme="nest"]{
+    /* GameNest dark-glass: jewel purple plate, frosted white cells, gold trim */
+    --board-bg-0:#1c1440; --board-bg-1:#120d2e; --board-bg-2:#0a071f;
+    --board-cell:#f3f1ff; --board-cell-edge:#c6c0e6; --board-edge-hi:rgba(255,205,60,.5);
+    --board-text:#ffd666; --board-hub-rim:#ffcd3c; --board-safe-star:#ffd24a;
+    --board-pad:#ffffff; --board-vignette:rgba(0,0,0,.42);
+    --board-mode: dark;
+  }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
   body{
     margin:0; min-height:100vh; color:var(--txt);
@@ -648,7 +656,7 @@ body::before{
   background:linear-gradient(120deg,rgba(255,255,255,.13),transparent 20%,transparent 78%,rgba(42,48,93,.08));
   mix-blend-mode:screen;
 }
-html[data-theme="dark"] #boardwrap::after{
+html[data-theme="dark"] #boardwrap::after, html[data-theme="nest"] #boardwrap::after{
   background:linear-gradient(120deg,rgba(255,255,255,.06),transparent 22%,transparent 75%,rgba(0,0,0,.2));
   opacity:.5;
 }
@@ -939,14 +947,95 @@ function finishSpotCross(color, idx){
 }
 function cellCenter(cr){ return [cr[0]*CELL + CELL/2, cr[1]*CELL + CELL/2]; }
 
-/* ---------- round board geometry (5-10 players) ---------- */
-const CSZ = 760, CC = 380, R_TRACK = 240;
-const LANE_R = [200,168,136,104,72];
+/* ---------- polygon board geometry (5-10 players): N arms of classic Ludo anatomy ----------
+   The server's ring is unchanged: M = 8 cells per arm, start of arm k at 8k, safe cells at 8k and 8k+4,
+   home lane M-1..M+3 (5 stops), finish M+4. Each arm is one corridor of three columns — an outward
+   column (A), the colored home column (B) and an inward column (C) — plus a cap cell at the outer end,
+   and a corner cell beside the hub that hands the ring to the next arm. Per arm, walking the ring:
+     cap(8k-2) → C3(8k-1, skipped by the owner) → C2(8k, START) → C1(8k+1) → corner(8k+2)
+     → A1 of arm k+1 (8k+3) → A2 (8k+4, SAFE ★) → A3 (8k+5) → cap of arm k+1 (8k+6) …
+   The yard wedge sits between two corridors and fills the polygon corner; the hub is a regular N-gon
+   with one colored wedge per arm (the last two home stops), the die hub HTML sits over its centre. */
+const CSZ = 760, CC = 380;
 function circAngle(absIdx, M){ return -Math.PI/2 + (2*Math.PI*absIdx)/M; }
 function circPoint(radius, ang){ return [CC + radius*Math.cos(ang), CC + radius*Math.sin(ang)]; }
-function circCellR(M){ return Math.max(8, Math.min(12, Math.floor(Math.PI*R_TRACK/M) - 3)); }
-function laneAngle(cfg, color){ return circAngle(cfg.starts[color], cfg.M) - (2*Math.PI/cfg.M)*1.5; }
-const BASE_PAD_POLAR = [[292,-0.058],[292,0.058],[322,-0.058],[322,0.058]];
+let POLY_CACHE = null;
+function polyGeom(cfg){
+  const colors = Object.keys(cfg.starts);
+  const N = colors.length, M = cfg.M, tpp = cfg.tpp || 4;
+  const key = N + "|" + M + "|" + tpp + "|" + colors.join(",");
+  if (POLY_CACHE && POLY_CACHE.key === key) return POLY_CACHE;
+  const seg = M / N;                                   // 8 on the live server; derived, not assumed
+  const hub = Math.max(3.4, N*3.7/(2*Math.PI));        // hub circumradius (cells): N corridors must fit around it
+  const side = 1.75;                                   // corridor half-width incl. the gap to the yard
+  const tOut = hub + 4.9;                              // yard's outer corner along the corridor side
+  const Rb = tOut / Math.cos(Math.PI/N);               // plate N-gon circumradius (vertices on the bisectors)
+  const d = (CSZ/2 - 6) / Rb;                          // cell size in viewBox units
+  const arm = colors.map(()=>null);
+  colors.forEach(c=>{ arm[Math.round(cfg.starts[c]/seg)] = c; });
+  const ang = (k)=> -Math.PI/2 + (2*Math.PI*k)/N;      // arm axis
+  const bis = (k)=> ang(k) + Math.PI/N;                // bisector between arm k and k+1 (a plate vertex)
+  const P = (k, t, s)=>{ const a = ang(k); return [CC + (t*Math.cos(a) - s*Math.sin(a))*d, CC + (t*Math.sin(a) + s*Math.cos(a))*d]; };
+  const Q = (a, r)=> [CC + r*Math.cos(a)*d, CC + r*Math.sin(a)*d];
+  const deg = (a)=> a*180/Math.PI;
+  // ring cells
+  const cell = [], cellRot = [], cellKind = [];
+  for (let a = 0; a < M; a++){
+    const k = Math.floor((a + 2) / seg) % N, j = (a + 2) % seg;
+    let p, rot = deg(ang(k)) + 90, kind = "track";
+    if (j === 0){ p = P(k, hub + 3.5, 0); kind = "cap"; }
+    else if (j <= 3){ p = P(k, hub + 3.5 - j, +1); }                       // C3, C2 (start), C1
+    else if (j === 4){                                                      // corner: midway between C1(k) and A1(k+1)
+      const r1 = Math.hypot(hub + 0.5, 1), off = Math.atan2(1, hub + 0.5);
+      p = Q(bis(k), r1 * Math.cos(Math.PI/N - off)); rot = deg(bis(k)) + 90; kind = "corner";
+    } else { p = P((k + 1) % N, hub + 0.5 + (j - 5), -1); rot = deg(ang((k + 1) % N)) + 90; }   // A1, A2 (safe), A3
+    cell.push(p); cellRot.push(rot); cellKind.push(kind);
+  }
+  // per-color: home lane (B3..B1 + two stops inside the hub wedge), yard seats, finish spots
+  const lane = {}, seat = {}, finish = {}, yard = {}, well = {}, tab = {};
+  const rowsFor = (tpp, hwOuter)=> tpp <= 2 ? [tpp] : tpp === 3 ? [2, 1] : (hwOuter >= 1.45 ? [3, 1] : [2, 2]);
+  colors.forEach(c=>{
+    const k = Math.round(cfg.starts[c]/seg);
+    lane[c] = [P(k, hub + 2.5, 0), P(k, hub + 1.5, 0), P(k, hub + 0.5, 0), Q(ang(k), hub*0.66), Q(ang(k), hub*0.34)];
+    finish[c] = []; for (let i = 0; i < tpp; i++) finish[c].push(Q(ang(k) + (i - (tpp-1)/2)*0.22, hub*0.16));
+    // yard between arm k and k+1 owned by the color starting at arm k (its wedge sits clockwise of its corridor)
+    const tIn = hub + 1.55, kn = (k + 1) % N, b = bis(k);
+    const L1 = P(k, tIn, side), L2 = P(k, tOut, side), V = Q(b, Rb - 0.28), R2 = P(kn, tOut, -side), R1 = P(kn, tIn, -side);
+    yard[c] = [L1, L2, V, R2, R1];
+    const cx = (L1[0]+L2[0]+V[0]+R2[0]+R1[0])/5, cy = (L1[1]+L2[1]+V[1]+R2[1]+R1[1])/5;
+    well[c] = yard[c].map(([x,y])=>[cx + (x-cx)*0.78, cy + (y-cy)*0.78]);
+    tab[c] = Q(b, Rb - 0.55);
+    /* seats live inside the well: measure the well along the bisector, then stack 1-3 rows outer→inner */
+    const cRad = Math.hypot(cx - CC, cy - CC) / d;
+    const rInMid = Math.hypot(tIn, side) * Math.cos(Math.PI/N - Math.atan2(side, tIn));
+    const wIn = cRad - 0.78*(cRad - rInMid), wOut = cRad + 0.78*((Rb - 0.28) - cRad);
+    const hwAt = (rho)=> 0.78*((cRad + (rho - cRad)/0.78)*Math.sin(Math.PI/N) - side) - 0.42;   // usable half-width for seat centres
+    const top = wOut - 0.55, bottom = wIn + 0.45;
+    let rows;
+    if (tpp <= 2) rows = [tpp];
+    else if (tpp === 3) rows = hwAt(top) >= 0.55 ? [2, 1] : [1, 1, 1];
+    else rows = hwAt(top) >= 1.1 ? [3, 1] : hwAt(top - 1.0) >= 0.5 ? [2, 2] : [2, 1, 1];
+    const step = rows.length > 1 ? Math.max(0.95, (top - bottom) / (rows.length - 1 + 0.5)) : 0;
+    seat[c] = [];
+    rows.forEach((n, ri)=>{
+      const rho = rows.length > 1 ? top - ri*step : (top + bottom)/2;
+      const gap = n > 1 ? Math.min(1.05, 2*Math.max(0.3, hwAt(rho)) / (n - 1)) : 0;
+      const [ux, uy] = [Math.cos(b), Math.sin(b)];
+      for (let i = 0; i < n; i++){
+        const s = (i - (n-1)/2) * gap;
+        seat[c].push([CC + (rho*ux - s*uy)*d, CC + (rho*uy + s*ux)*d]);
+      }
+    });
+  });
+  const platePts = [], hubPts = [];
+  for (let k = 0; k < N; k++){ platePts.push(Q(bis(k), Rb)); hubPts.push(Q(bis(k), hub)); }
+  const wedge = {};
+  colors.forEach(c=>{ const k = Math.round(cfg.starts[c]/seg); wedge[c] = [[CC, CC], Q(bis((k - 1 + N) % N), hub), Q(bis(k), hub)]; });
+  POLY_CACHE = { key, N, M, seg, d, hub, Rb, arm, cell, cellRot, cellKind, lane, seat, finish, yard, well, tab, platePts, hubPts, wedge };
+  return POLY_CACHE;
+}
+/* pawn tap-zone radius used by the mobile audit: half a cell on the polygon board */
+function circCellR(M){ const N = Math.max(5, Math.round(M/8)); return polyGeom({ starts: Object.fromEntries(Array.from({length:N},(_, k)=>["c"+k, k*8])), M, tpp: 4 }).d * 0.5; }
 
 function tokenXY(color, pos, idx, cfg){
   if (cfg.mode === "cross"){
@@ -958,19 +1047,11 @@ function tokenXY(color, pos, idx, cfg){
     if (pos <= cfg.M - 2) return cellCenter(TRACK[(cfg.starts[color]+pos)%cfg.M]);
     return cellCenter(HOME_PATH[color][pos-(cfg.M-1)]);
   }
-  const startAng = circAngle(cfg.starts[color], cfg.M);
-  if (pos === -1){
-    const pp = BASE_PAD_POLAR[idx] || BASE_PAD_POLAR[0];
-    return circPoint(pp[0], startAng + pp[1]);
-  }
-  if (pos === cfg.M + 4){
-    const off = (idx - (cfg.tpp-1)/2) * 0.16;
-    return circPoint(26, startAng + off);
-  }
-  if (pos <= cfg.M - 2){
-    return circPoint(R_TRACK, circAngle((cfg.starts[color]+pos)%cfg.M, cfg.M));
-  }
-  return circPoint(LANE_R[pos-(cfg.M-1)], laneAngle(cfg, color));
+  const G = polyGeom(cfg);
+  if (pos === -1) return G.seat[color][Math.min(idx, G.seat[color].length-1)];
+  if (pos === cfg.M + 4) return G.finish[color][Math.min(idx, G.finish[color].length-1)];
+  if (pos <= cfg.M - 2) return G.cell[(cfg.starts[color]+pos)%cfg.M];
+  return G.lane[color][pos-(cfg.M-1)];
 }
 
 function legalMoves(room){
@@ -1037,31 +1118,31 @@ setMuteIcon();
 const THEME_KEY = "ludoTheme";
 function systemDark(){ return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches; }
 function resolveTheme(pref){
-  if (pref === "light" || pref === "dark") return pref;
+  if (pref === "light" || pref === "dark" || pref === "nest") return pref;
   return systemDark() ? "dark" : "light";
 }
 function applyTheme(pref){
   const resolved = resolveTheme(pref);
   document.documentElement.setAttribute("data-theme", resolved);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", resolved === "dark" ? "#0a0d1e" : "#14182a");
+  if (meta) meta.setAttribute("content", resolved === "dark" ? "#0a0d1e" : resolved === "nest" ? "#0e0a24" : "#14182a");
   const btn = $("themeBtn");
   if (btn){
-    btn.innerHTML = resolved === "dark" ? "&#9788;" : "&#9789;";
-    btn.title = resolved === "dark" ? "Switch to light board" : "Switch to dark board";
+    btn.innerHTML = resolved === "nest" ? "&#10022;" : resolved === "dark" ? "&#9788;" : "&#9789;";
+    btn.title = resolved === "nest" ? "Switch to auto (system) board" : resolved === "dark" ? "Switch to the GameNest board" : "Switch to dark board";
   }
   // force board redraw with new palette (no-op during initial load, before state exists)
   try { lastBoardKey = ""; if (S && S.room) drawBoard(S.room, true); } catch (e) {}
 }
-let themePref = localStorage.getItem(THEME_KEY) || "auto";
+let themePref = localStorage.getItem(THEME_KEY) || "nest";   // GameNest dark-glass board is the default skin
 applyTheme(themePref);
 $("themeBtn").onclick = ()=>{
-  const order = ["auto","light","dark"];
+  const order = ["auto","light","dark","nest"];
   const i = order.indexOf(themePref);
   themePref = order[(i+1)%order.length];
   localStorage.setItem(THEME_KEY, themePref);
   applyTheme(themePref);
-  const labels = { auto:"Auto (system)", light:"Light board", dark:"Dark board" };
+  const labels = { auto:"Auto (system)", light:"Light board", dark:"Dark board", nest:"GameNest board" };
   if (typeof toast === "function") toast(labels[themePref]);
 };
 if (window.matchMedia){
@@ -1320,6 +1401,7 @@ function renderLobby(r){
 
 function renderGame(r){
   show("game");
+  if (r.tokens) preloadSprites(Object.keys(r.tokens));
   $("roomtag").textContent = "#" + r.code;
   applyTurnVisuals(r);
   const finish = r.cfg.M + 4;
@@ -1651,14 +1733,17 @@ $("boardwrap").addEventListener("click", (e)=>{
 });
 
 function isDarkBoard(){
-  return document.documentElement.getAttribute("data-theme") === "dark";
+  const t = document.documentElement.getAttribute("data-theme");
+  return t === "dark" || t === "nest";
 }
+function isNestBoard(){ return document.documentElement.getAttribute("data-theme") === "nest"; }
 function cssVar(name, fallback){
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return v || fallback;
 }
 function defsSVG(colors){
   const dark = isDarkBoard();
+  const nest = isNestBoard();
   const bg0 = cssVar("--board-bg-0", dark?"#1a1e32":"#fefefe");
   const bg1 = cssVar("--board-bg-1", dark?"#14182a":"#f4f5fb");
   const bg2 = cssVar("--board-bg-2", dark?"#0e1220":"#e4e6f2");
@@ -1724,16 +1809,27 @@ function defsSVG(colors){
        `<stop offset="45%" stop-color="#ffd666" stop-opacity="0.55"/>`+
        `<stop offset="100%" stop-color="#ffc233" stop-opacity="0"/></radialGradient>`;
   /* advanced board texture: multi-octave grain + subtle lighting */
+  /* board texture: multi-octave grain; the specular pass (a bright lit-noise layer) only suits the light
+     board — on dark skins it washes the surface to grey, so they get grain alone */
   d += `<filter id="boardTexture" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB">`+
        `<feTurbulence type="fractalNoise" baseFrequency="${dark?"0.7":"0.85"}" numOctaves="4" seed="11" result="noise"/>`+
        `<feColorMatrix in="noise" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 ${grainAmt} 0" result="grain"/>`+
        `<feBlend in="SourceGraphic" in2="grain" mode="${dark?"soft-light":"multiply"}" result="textured"/>`+
-       `<feSpecularLighting in="noise" surfaceScale="${dark?3:2}" specularConstant="0.55" specularExponent="28" lighting-color="${dark?"#8ab4ff":"#ffffff"}" result="spec">`+
+       (dark ? "" :
+       `<feSpecularLighting in="noise" surfaceScale="2" specularConstant="0.55" specularExponent="28" lighting-color="#ffffff" result="spec">`+
        `<fePointLight x="180" y="80" z="120"/></feSpecularLighting>`+
-       `<feComposite in="spec" in2="textured" operator="arithmetic" k1="0" k2="1" k3="${dark?0.35:0.22}" k4="0"/></filter>`;
+       `<feComposite in="spec" in2="textured" operator="arithmetic" k1="0" k2="1" k3="0.22" k4="0"/>`)+
+       `</filter>`;
   d += `<linearGradient id="cellWhite" x1="0" y1="0" x2="0" y2="1">`+
-       `<stop offset="0%" stop-color="${dark?"#2a3150":"#ffffff"}"/><stop offset="55%" stop-color="${cell}"/>`+
-       `<stop offset="100%" stop-color="${dark?"#151a2e":"#e6e8f3"}"/></linearGradient>`;
+       `<stop offset="0%" stop-color="${nest?"#ffffff":dark?"#2a3150":"#ffffff"}"/><stop offset="55%" stop-color="${cell}"/>`+
+       `<stop offset="100%" stop-color="${nest?"#dcd8f2":dark?"#151a2e":"#e6e8f3"}"/></linearGradient>`;
+  /* polygon plate: a shade lighter than the wallpaper so the N-gon reads as a slab */
+  d += `<linearGradient id="plateFill" x1="0" y1="0" x2="1" y2="1">`+
+       `<stop offset="0%" stop-color="${nest?"#2f2566":dark?"#232948":"#ffffff"}"/><stop offset="55%" stop-color="${nest?"#1d1646":dark?"#1a1f38":"#f3f4fa"}"/>`+
+       `<stop offset="100%" stop-color="${nest?"#140f33":dark?"#12162a":"#e2e4f0"}"/></linearGradient>`;
+  /* lime / brown pawns: tinted green / orange sprites (8 sprite colors, 10 seat colors) */
+  d += `<filter id="tintLime" color-interpolation-filters="sRGB"><feColorMatrix type="hueRotate" values="-38"/><feColorMatrix type="saturate" values="1.15"/></filter>`;
+  d += `<filter id="tintBrown" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0.5"/><feComponentTransfer><feFuncR type="linear" slope="0.74"/><feFuncG type="linear" slope="0.6"/><feFuncB type="linear" slope="0.48"/></feComponentTransfer></filter>`;
   d += `<linearGradient id="boardEdge" x1="0" y1="0" x2="1" y2="1">`+
        `<stop offset="0%" stop-color="#ffffff" stop-opacity="${edgeHi}"/>`+
        `<stop offset="42%" stop-color="#d4d7e8" stop-opacity="${dark?0.08:0.22}"/>`+
@@ -1766,42 +1862,33 @@ function boardKey(r){
     (document.documentElement.getAttribute("data-theme")||"light") + "|" + (window.__useGL?"gl":"svg");
 }
 
+/* ---------- pawn sprites (public/sprites, height-normalised to 256px; lime/brown are tinted green/orange) ---------- */
+const SPRITE = {
+  red:{ href:"sprites/pawn_red.png", aspect:0.59 }, green:{ href:"sprites/pawn_green.png", aspect:0.625 },
+  yellow:{ href:"sprites/pawn_yellow.png", aspect:0.609 }, blue:{ href:"sprites/pawn_blue.png", aspect:0.613 },
+  orange:{ href:"sprites/pawn_orange.png", aspect:0.609 }, purple:{ href:"sprites/pawn_purple.png", aspect:0.613 },
+  teal:{ href:"sprites/pawn_teal.png", aspect:0.602 }, pink:{ href:"sprites/pawn_pink.png", aspect:0.602 },
+  lime:{ href:"sprites/pawn_green.png", aspect:0.625, filter:"tintLime" }, brown:{ href:"sprites/pawn_orange.png", aspect:0.609, filter:"tintBrown" },
+};
+const spritesWarm = new Set();
+function preloadSprites(colors){
+  for (const c of colors){ const sp = SPRITE[c]; if (!sp || spritesWarm.has(sp.href)) continue; spritesWarm.add(sp.href); const im = new Image(); im.src = sp.href; }
+}
+/* A pawn sprite standing on cell (x,y): ring marker on the cell, sprite base just below the centre, glow + bob when movable. */
 function pawnSVG(x, y, u, c, glow){
-  const gy = y + u*0.52;
-  const ny = gy - u*1.22;
-  const hy = ny - u*0.52;
+  const sp = SPRITE[c] || SPRITE.red;
+  const hgt = u * 3.6, w = hgt * sp.aspect;
+  const by = y + u * 0.62;
   let s = "";
+  s += `<ellipse cx="${x}" cy="${by}" rx="${w*0.46}" ry="${hgt*0.1}" fill="#06041a" opacity="${glow?0.5:0.36}"/>`;
+  s += `<ellipse cx="${x}" cy="${by}" rx="${w*0.4}" ry="${hgt*0.075}" fill="none" stroke="${DARKHEX[c]||"#333"}" stroke-opacity="0.85" stroke-width="${Math.max(1.2, u*0.16)}"/>`;
   if (glow){
-    s += `<ellipse cx="${x}" cy="${gy}" rx="${u*1.7}" ry="${u*0.72}" fill="url(#pickGlow)">`+
+    s += `<ellipse cx="${x}" cy="${by}" rx="${w*0.95}" ry="${hgt*0.22}" fill="url(#pickGlow)">`+
          `<animate attributeName="opacity" values="1;0.4;1" dur="0.85s" repeatCount="indefinite"/></ellipse>`;
   }
   s += `<g>`;
-  if (glow){
-    s += `<animateTransform attributeName="transform" type="translate" values="0 0;0 ${-u*0.32};0 0" dur="0.8s" repeatCount="indefinite"/>`;
-  }
-  /* soft ground shadow */
-  s += `<ellipse cx="${x}" cy="${gy+u*0.18}" rx="${u*0.98}" ry="${u*0.32}" fill="#0a0e28" opacity="0.28"/>`;
-  /* glossy base disc */
-  s += `<ellipse cx="${x}" cy="${gy}" rx="${u*0.9}" ry="${u*0.38}" fill="url(#baseRing_${c})" stroke="${DARKHEX[c]}" stroke-opacity="0.55" stroke-width="1.1"/>`;
-  s += `<ellipse cx="${x}" cy="${gy-u*0.06}" rx="${u*0.74}" ry="${u*0.24}" fill="#ffffff" opacity="0.14"/>`;
-  /* body stem */
-  s += `<path d="M ${x-u*0.56} ${gy-u*0.12} C ${x-u*0.5} ${gy-u*0.62} ${x-u*0.32} ${ny+u*0.38} ${x-u*0.22} ${ny} L ${x+u*0.22} ${ny} C ${x+u*0.32} ${ny+u*0.38} ${x+u*0.5} ${gy-u*0.62} ${x+u*0.56} ${gy-u*0.12} Z" fill="url(#b_${c})" stroke="${DARKHEX[c]}" stroke-opacity="0.4" stroke-width="1.05" stroke-linejoin="round"/>`;
-  /* mid collar */
-  s += `<ellipse cx="${x}" cy="${gy-u*0.14}" rx="${u*0.58}" ry="${u*0.22}" fill="url(#b_${c})"/>`;
-  s += `<ellipse cx="${x}" cy="${gy-u*0.2}" rx="${u*0.48}" ry="${u*0.14}" fill="#ffffff" opacity="0.12"/>`;
-  /* strong specular highlight on body */
-  s += `<path d="M ${x-u*0.32} ${gy-u*0.42} C ${x-u*0.33} ${gy-u*0.92} ${x-u*0.24} ${ny+u*0.28} ${x-u*0.19} ${ny+u*0.08}" stroke="#ffffff" stroke-width="${u*0.2}" opacity="0.72" fill="none" stroke-linecap="round"/>`;
-  /* neck */
-  s += `<ellipse cx="${x}" cy="${ny}" rx="${u*0.3}" ry="${u*0.13}" fill="${DARKHEX[c]}" opacity="0.92"/>`;
-  /* glossy head */
-  s += `<circle cx="${x}" cy="${hy}" r="${u*0.58}" fill="url(#g_${c})" stroke="${DARKHEX[c]}" stroke-opacity="0.35" stroke-width="1.1"/>`;
-  /* primary specular */
-  s += `<ellipse cx="${x-u*0.18}" cy="${hy-u*0.22}" rx="${u*0.2}" ry="${u*0.14}" fill="#ffffff" opacity="0.92"/>`;
-  s += `<circle cx="${x-u*0.25}" cy="${hy-u*0.27}" r="${u*0.075}" fill="#ffffff" opacity="0.95"/>`;
-  /* secondary soft highlight */
-  s += `<ellipse cx="${x+u*0.16}" cy="${hy+u*0.22}" rx="${u*0.22}" ry="${u*0.11}" fill="#ffffff" opacity="0.22"/>`;
-  /* tiny top rim highlight */
-  s += `<ellipse cx="${x}" cy="${hy-u*0.42}" rx="${u*0.28}" ry="${u*0.1}" fill="#ffffff" opacity="0.18"/>`;
+  if (glow) s += `<animateTransform attributeName="transform" type="translate" values="0 0;0 ${-u*0.6};0 0" dur="0.8s" repeatCount="indefinite"/>`;
+  s += `<image href="${sp.href}" x="${(x - w/2).toFixed(1)}" y="${(by - hgt).toFixed(1)}" width="${w.toFixed(1)}" height="${hgt.toFixed(1)}" preserveAspectRatio="xMidYMax meet"${sp.filter?` filter="url(#${sp.filter})"`:""}/>`;
   s += `</g>`;
   return s;
 }
@@ -1815,11 +1902,12 @@ function tokensSVG(r, cfg){
       (groups[key] = groups[key] || []).push({ c, i, x, y, pos });
     });
   }
-  const OFF = [[0,0],[-8,-8],[8,8],[-8,8],[8,-8]];
+  const so = cfg.mode === "cross" ? 8 : polyGeom(cfg).d * 0.22;
+  const OFF = [[0,0],[-so,-so],[so,so],[-so,so],[so,-so]];
   const mine = (!animRunning && myTurn() && r.phase === "move") ? legalMoves(r) : [];
   const mc = myColor();
   const finish = cfg.M + 4;
-  const baseR = cfg.mode === "cross" ? 14 : Math.max(9, circCellR(cfg.M));
+  const baseR = cfg.mode === "cross" ? 14 : polyGeom(cfg).d * 0.42;
   /* Circle boards: pieces are small, so movable ones get a bigger invisible tap
      zone (35 units ≈ 32px on a 390px-wide phone), shrunk to half the gap to the
      nearest other movable piece on a different cell so two zones never overlap
@@ -1859,7 +1947,7 @@ function tokensSVG(r, cfg){
       } else {
         s += pawnSVG(x, y, rad, t.c, canPick);
       }
-      if (canPick) s += `<circle cx="${x}" cy="${y - rad*0.6}" r="${circleHitR ? circleHitR(t.i) : rad+14}" fill="transparent"/>`;
+      if (canPick) s += `<circle cx="${x}" cy="${y - rad*1.2}" r="${circleHitR ? circleHitR(t.i) : rad+18}" fill="transparent"/>`;
       s += `</g>`;
       pieces.push({ y: y, s: s });
     });
@@ -1904,9 +1992,12 @@ function drawBoard(r, force){
   TRACK.forEach((cr, absIdx)=>{
     const startColor = ["red","green","yellow","blue"].find(c=>C_START[c] === absIdx);
     s += `<rect x="${cr[0]*CELL+1.5}" y="${cr[1]*CELL+1.5}" width="${CELL-3}" height="${CELL-3}" rx="8" fill="${startColor?`url(#b_${startColor})`:"url(#cellWhite)"}" stroke="${startColor?"none":"#dcdcec"}" stroke-width="1"/>`;
-    if (C_SAFE.has(absIdx)){
-      const fs = startColor ? 17 : 20;
-      s += `<text x="${cr[0]*CELL+CELL/2}" y="${cr[1]*CELL+CELL/2+7}" text-anchor="middle" font-size="${fs}" fill="url(#starGold)">\u2605</text>`;
+    if (startColor){
+      /* start arrow along the direction of travel */
+      const rot = { red:90, green:180, yellow:270, blue:0 }[startColor];
+      s += `<path d="M -7.5 4.5 L 0 -8 L 7.5 4.5 Z" transform="translate(${cr[0]*CELL+CELL/2} ${cr[1]*CELL+CELL/2}) rotate(${rot})" fill="#ffffff" opacity=".92"/>`;
+    } else if (C_SAFE.has(absIdx)){
+      s += `<text x="${cr[0]*CELL+CELL/2}" y="${cr[1]*CELL+CELL/2+7}" text-anchor="middle" font-size="20" fill="url(#starGold)" filter="url(#safeGlow)">\u2605</text>`;
     }
   });
   for (const c of ["red","green","yellow","blue"]){
@@ -1931,63 +2022,89 @@ function drawBoard(r, force){
   $("boardwrap").innerHTML = s;
 }
 
-function drawCircleBoard(r, cfg){
-  const M = cfg.M;
-  const cr = circCellR(M);
-  const colors = Object.keys(cfg.starts);
-  const startOf = {};
-  colors.forEach(c=>{ startOf[cfg.starts[c]] = c; });
+function polyPath(pts, rr){
+  /* closed polygon with rounded corners (rr = corner radius in viewBox units) */
+  const n = pts.length; let d = "";
+  for (let i = 0; i < n; i++){
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n];
+    const v1 = [p0[0]-p1[0], p0[1]-p1[1]], v2 = [p2[0]-p1[0], p2[1]-p1[1]];
+    const l1 = Math.hypot(v1[0], v1[1]), l2 = Math.hypot(v2[0], v2[1]);
+    const r = Math.min(rr, l1/2, l2/2);
+    const a = [p1[0] + v1[0]/l1*r, p1[1] + v1[1]/l1*r], b = [p1[0] + v2[0]/l2*r, p1[1] + v2[1]/l2*r];
+    d += (i ? "L" : "M") + a[0].toFixed(1) + " " + a[1].toFixed(1) + " Q" + p1[0].toFixed(1) + " " + p1[1].toFixed(1) + " " + b[0].toFixed(1) + " " + b[1].toFixed(1) + " ";
+  }
+  return d + "Z";
+}
+function cellRect(x, y, size, rot, fill, stroke){
+  const h = size/2;
+  return `<rect x="${(-h).toFixed(1)}" y="${(-h).toFixed(1)}" width="${size.toFixed(1)}" height="${size.toFixed(1)}" rx="${(size*0.22).toFixed(1)}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)})" fill="${fill}"${stroke?` stroke="${stroke}" stroke-width="1"`:""}/>`;
+}
+function drawCircleBoard(r, cfg){ drawPolyBoard(r, cfg); }   // legacy name: 5-10 players now get the N-arm polygon board
+function drawPolyBoard(r, cfg){
+  const G = polyGeom(cfg);
+  const colors = Object.keys(cfg.starts), N = G.N, d = G.d, M = G.M;
+  const startOf = {}; colors.forEach(c=>{ startOf[cfg.starts[c]] = c; });
   const safeSet = new Set(cfg.safe);
+  const nest = isNestBoard(), dark = isDarkBoard();
+  const cellSz = d * 0.9;
+  const pad = cssVar("--board-pad", "#f0f0f8");
+  const cellEdge = cssVar("--board-cell-edge", "#dcdcec");
+  const rim = cssVar("--board-hub-rim", "#c9a227");
+  const wellFill = nest ? "#f7f5ff" : dark ? pad : "#fcfcff";
 
   let s = `<svg viewBox="0 0 ${CSZ} ${CSZ}" xmlns="http://www.w3.org/2000/svg">`;
   s += defsSVG(colors);
+  /* wallpaper + plate */
   s += `<rect x="0" y="0" width="${CSZ}" height="${CSZ}" rx="18" fill="url(#boardSurface)" filter="url(#boardTexture)"/>`;
   s += `<rect x="0" y="0" width="${CSZ}" height="${CSZ}" rx="18" fill="url(#boardVignette)"/>`;
-  s += `<rect x="5" y="5" width="${CSZ-10}" height="${CSZ-10}" rx="15" fill="none" stroke="url(#boardEdge)" stroke-width="2.2" opacity=".85"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="${CSZ*.46}" fill="url(#boardGlow)" opacity=".78"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="${R_TRACK}" fill="none" stroke="#ffffff" stroke-width="${cr*2+14}" filter="url(#softS)"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="${R_TRACK + cr + 7}" fill="none" stroke="#e0e0f0" stroke-width="1.6"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="${R_TRACK - cr - 7}" fill="none" stroke="#e0e0f0" stroke-width="1.6"/>`;
-
+  const plate = polyPath(G.platePts, d*0.9);
+  s += `<path d="${plate}" fill="url(#plateFill)" filter="url(#softS)"/>`;
+  s += `<path d="${plate}" fill="url(#boardGlow)" opacity="${nest?0.35:0.7}"/>`;
+  s += `<path d="${plate}" fill="none" stroke="url(#boardEdge)" stroke-width="2.4" opacity=".9"/>`;
+  if (nest) s += `<path d="${plate}" fill="none" stroke="${rim}" stroke-opacity=".45" stroke-width="1.2" transform="translate(${CC} ${CC}) scale(.985) translate(${-CC} ${-CC})"/>`;
+  /* yards: colored wedge, white token well, seat rings, color tab at the corner */
   for (const c of colors){
-    const ang = circAngle(cfg.starts[c], M);
-    const [bx, by] = circPoint(307, ang);
-    s += `<circle cx="${bx}" cy="${by}" r="33" fill="${HEX[c]}" opacity="0.18"/>`;
-    s += `<circle cx="${bx}" cy="${by}" r="33" fill="none" stroke="${HEX[c]}" stroke-opacity="0.6" stroke-width="2.2"/>`;
-    for (let k = 0; k < cfg.tpp; k++){
-      const pp = BASE_PAD_POLAR[k];
-      const [px, py] = circPoint(pp[0], ang + pp[1]);
-      s += `<circle cx="${px}" cy="${py}" r="11" fill="#f0f0f8" stroke="${HEX[c]}" stroke-opacity="0.45" stroke-width="1.8"/>`;
-      s += `<circle cx="${px}" cy="${py}" r="7" fill="none" stroke="${HEX[c]}" stroke-opacity="0.18" stroke-width="1.2"/>`;
+    s += `<path d="${polyPath(G.yard[c], d*0.5)}" fill="url(#v_${c})" filter="url(#softS)"/>`;
+    s += `<path d="${polyPath(G.yard[c], d*0.5)}" fill="#ffffff" opacity="${nest?0.14:0.2}" transform="translate(0 ${-d*0.08})" clip-path="none"/>`;
+    s += `<path d="${polyPath(G.well[c], d*0.45)}" fill="${wellFill}" stroke="${cellEdge}" stroke-width="1.4" opacity=".97"/>`;
+    const [tx, ty] = G.tab[c];
+    s += `<circle cx="${tx.toFixed(1)}" cy="${ty.toFixed(1)}" r="${(d*0.34).toFixed(1)}" fill="url(#b_${c})" stroke="#ffffff" stroke-opacity=".55" stroke-width="1.2"/>`;
+    for (const [px, py] of G.seat[c]){
+      s += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(d*0.4).toFixed(1)}" fill="${pad}"/>`;
+      s += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(d*0.4).toFixed(1)}" fill="none" stroke="${HEX[c]}" stroke-opacity="0.45" stroke-width="2"/>`;
+      s += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(d*0.26).toFixed(1)}" fill="none" stroke="${HEX[c]}" stroke-opacity="0.16" stroke-width="1.3"/>`;
     }
   }
-
+  /* home columns (3 cells each; the last two stops are the hub wedge) */
   for (const c of colors){
-    const la = laneAngle(cfg, c);
-    for (const lr of LANE_R){
-      const [lx, ly] = circPoint(lr, la);
-      s += `<circle cx="${lx}" cy="${ly}" r="${cr}" fill="url(#b_${c})" opacity="0.97"/>`;
+    for (let i = 0; i < 3; i++){
+      const [lx, ly] = G.lane[c][i];
+      s += cellRect(lx, ly, cellSz, G.cellRot[cfg.starts[c]], `url(#b_${c})`);
     }
   }
-
+  /* ring cells */
   for (let a = 0; a < M; a++){
-    const [x, y] = circPoint(R_TRACK, circAngle(a, M));
-    const oc = startOf[a];
-    s += `<circle cx="${x}" cy="${y}" r="${cr}" fill="${oc?`url(#b_${oc})`:"url(#cellWhite)"}" stroke="${oc?"none":"#dcdcec"}" stroke-width="1"/>`;
-    if (safeSet.has(a)){
-      const fs = oc ? 10 : 12;
-      s += `<text x="${x}" y="${y+3.8}" text-anchor="middle" font-size="${fs}" fill="url(#starGold)">\u2605</text>`;
+    const [x, y] = G.cell[a], oc = startOf[a];
+    s += cellRect(x, y, cellSz, G.cellRot[a], oc ? `url(#b_${oc})` : "url(#cellWhite)", oc ? null : cellEdge);
+    if (oc){
+      /* start arrow: points inward along the direction of travel (toward the hub) */
+      const rot = G.cellRot[a] + 180;   // cellRot is axis+90 (outward = "up" in cell space) → +180 flips to inward
+      s += `<path d="M -${(d*0.19).toFixed(1)} ${(d*0.12).toFixed(1)} L 0 -${(d*0.2).toFixed(1)} L ${(d*0.19).toFixed(1)} ${(d*0.12).toFixed(1)} Z" transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${rot.toFixed(1)})" fill="#ffffff" opacity=".92"/>`;
+    } else if (safeSet.has(a)){
+      s += `<text x="${x.toFixed(1)}" y="${(y + d*0.19).toFixed(1)}" text-anchor="middle" font-size="${(d*0.62).toFixed(1)}" fill="url(#starGold)" filter="url(#safeGlow)">★</text>`;
     }
   }
-
-  s += `<circle cx="${CC}" cy="${CC}" r="68" fill="url(#pickGlow)" opacity="0.5"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="54" fill="#ffffff" opacity=".38"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="48" fill="url(#hubGold)" filter="url(#hubShine)" stroke="#ffffff" stroke-opacity=".7" stroke-width="1.8"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="36" fill="none" stroke="#8a5f00" stroke-opacity=".22" stroke-width="1.3"/>`;
-  s += `<circle cx="${CC}" cy="${CC}" r="26" fill="none" stroke="#ffffff" stroke-opacity=".2" stroke-width="1"/>`;
-  s += `<text x="${CC}" y="${CC-6}" text-anchor="middle" font-size="14" font-weight="900" letter-spacing="1.5" fill="#6b4a00">LUDO</text>`;
-  s += `<text x="${CC}" y="${CC+12}" text-anchor="middle" font-size="15" fill="#ffffff">\u2605</text>`;
-  s += `<text x="${CC}" y="${CC+28}" text-anchor="middle" font-size="10" font-weight="800" fill="#8a5f00">HOME</text>`;
+  /* hub: N-gon with one colored wedge per arm, gold centre under the die */
+  s += `<path d="${polyPath(G.hubPts, d*0.35)}" fill="url(#hubGold)" filter="url(#hubShine)"/>`;
+  for (const c of colors){
+    const w = G.wedge[c];
+    s += `<polygon points="${w.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")}" fill="url(#b_${c})" stroke="#ffffff" stroke-width="2" stroke-linejoin="round" transform="translate(${CC} ${CC}) scale(.9) translate(${-CC} ${-CC})"/>`;
+  }
+  const hr = Math.max(26, G.hub*d*0.3);
+  s += `<circle cx="${CC}" cy="${CC}" r="${(hr+5).toFixed(1)}" fill="#ffffff" opacity=".3"/>`;
+  s += `<circle cx="${CC}" cy="${CC}" r="${hr.toFixed(1)}" fill="url(#hubGold)" stroke="#ffffff" stroke-opacity=".8" stroke-width="1.8" filter="url(#softS)"/>`;
+  s += `<text x="${CC}" y="${CC-4}" text-anchor="middle" font-size="${Math.max(11, hr*0.42).toFixed(1)}" font-weight="900" letter-spacing="1.5" fill="#6b4a00">LUDO</text>`;
+  s += `<text x="${CC}" y="${CC+hr*0.45}" text-anchor="middle" font-size="${Math.max(12, hr*0.45).toFixed(1)}" fill="#ffffff">★</text>`;
   s += tokensSVG(r, cfg);
   s += `</svg>`;
   $("boardwrap").innerHTML = s;
