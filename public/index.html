@@ -1031,7 +1031,13 @@ function polyGeom(cfg){
   for (let k = 0; k < N; k++){ platePts.push(Q(bis(k), Rb)); hubPts.push(Q(bis(k), hub)); }
   const wedge = {};
   colors.forEach(c=>{ const k = Math.round(cfg.starts[c]/seg); wedge[c] = [[CC, CC], Q(bis((k - 1 + N) % N), hub), Q(bis(k), hub)]; });
-  POLY_CACHE = { key, N, M, seg, d, hub, Rb, arm, cell, cellRot, cellKind, lane, seat, finish, yard, well, tab, platePts, hubPts, wedge };
+  /* jewel plate (art/plate.jpg): parchment inner measured at x 175..1095, y 180..1030 of 1254; drawn 6% oversize */
+  const PS = 1.06, k760 = CSZ/1254;
+  const inX = [175, 1095].map(v=> CC + (v*k760 - CC)*PS), inY = [180, 1030].map(v=> CC + (v*k760 - CC)*PS);
+  const plate = { img: { x: CC - CSZ*PS/2, size: CSZ*PS }, cx: (inX[0]+inX[1])/2, cy: (inY[0]+inY[1])/2,
+                  s: Math.min(inX[1]-inX[0], inY[1]-inY[0]) / 2 / (Rb*d) };
+  plate.xform = `translate(${plate.cx.toFixed(1)} ${plate.cy.toFixed(1)}) scale(${plate.s.toFixed(4)}) translate(${-CC} ${-CC})`;
+  POLY_CACHE = { key, N, M, seg, d, hub, Rb, arm, cell, cellRot, cellKind, lane, seat, finish, yard, well, tab, platePts, hubPts, wedge, plate };
   return POLY_CACHE;
 }
 /* pawn tap-zone radius used by the mobile audit: half a cell on the polygon board */
@@ -1680,6 +1686,7 @@ function boardBurst(x,y,color,kind){
     const ns='http://www.w3.org/2000/svg';
     const g=document.createElementNS(ns,'g');
     g.setAttribute('pointer-events','none');
+    { const xf = boardXform(S && S.room && S.room.cfg); if (xf) g.setAttribute('transform', xf); }
     const dur = isHome ? '.55s' : '.38s';
     const ring=document.createElementNS(ns,'circle');
     ring.setAttribute('cx',x); ring.setAttribute('cy',y); ring.setAttribute('r',isHome?10:12);
@@ -1925,7 +1932,7 @@ function tokensSVG(r, cfg){
     }
     circleHitR = (i)=>{
       const p0 = picks.find(p=>p.i===i);
-      let r = 35;
+      let r = 35 / polyGeom(cfg).plate.s;   // 35 viewBox units on screen, whatever the plate scale
       for (const p of picks){
         if (p.i === i || p.pos === p0.pos) continue;
         r = Math.min(r, Math.hypot(p.x-p0.x, p.y-p0.y)/2 - 1);
@@ -2020,6 +2027,7 @@ function drawBoard(r, force){
   s += tokensSVG(r, cfg);
   s += `</svg>`;
   $("boardwrap").innerHTML = s;
+  const hub = $("dicehub"); if (hub){ hub.style.left = ""; hub.style.top = ""; }
 }
 
 function polyPath(pts, rr){
@@ -2054,9 +2062,10 @@ function drawPolyBoard(r, cfg){
 
   let s = `<svg viewBox="0 0 ${CSZ} ${CSZ}" xmlns="http://www.w3.org/2000/svg">`;
   s += defsSVG(colors);
-  /* wallpaper + plate */
-  s += `<rect x="0" y="0" width="${CSZ}" height="${CSZ}" rx="18" fill="url(#boardSurface)" filter="url(#boardTexture)"/>`;
-  s += `<rect x="0" y="0" width="${CSZ}" height="${CSZ}" rx="18" fill="url(#boardVignette)"/>`;
+  /* jewel plate around the board; the N-gon and everything on it are scaled into the plate's parchment inner */
+  s += `<rect x="0" y="0" width="${CSZ}" height="${CSZ}" rx="18" fill="url(#boardSurface)"/>`;
+  s += `<image href="art/plate.jpg" x="${G.plate.img.x.toFixed(1)}" y="${G.plate.img.x.toFixed(1)}" width="${G.plate.img.size.toFixed(1)}" height="${G.plate.img.size.toFixed(1)}" preserveAspectRatio="none"/>`;
+  s += `<g transform="${G.plate.xform}">`;
   const plate = polyPath(G.platePts, d*0.9);
   s += `<path d="${plate}" fill="url(#plateFill)" filter="url(#softS)"/>`;
   s += `<path d="${plate}" fill="url(#boardGlow)" opacity="${nest?0.35:0.7}"/>`;
@@ -2106,9 +2115,13 @@ function drawPolyBoard(r, cfg){
   s += `<text x="${CC}" y="${CC-4}" text-anchor="middle" font-size="${Math.max(11, hr*0.42).toFixed(1)}" font-weight="900" letter-spacing="1.5" fill="#6b4a00">LUDO</text>`;
   s += `<text x="${CC}" y="${CC+hr*0.45}" text-anchor="middle" font-size="${Math.max(12, hr*0.45).toFixed(1)}" fill="#ffffff">★</text>`;
   s += tokensSVG(r, cfg);
-  s += `</svg>`;
+  s += `</g></svg>`;
   $("boardwrap").innerHTML = s;
+  const hub = $("dicehub");
+  if (hub){ hub.style.left = (G.plate.cx/CSZ*100).toFixed(2) + "%"; hub.style.top = (G.plate.cy/CSZ*100).toFixed(2) + "%"; }
 }
+/* transform that maps polygon-board coordinates into the SVG (identity on the classic cross board) */
+function boardXform(cfg){ return (cfg && cfg.mode !== "cross") ? polyGeom(cfg).plate.xform : ""; }
 
 document.getElementById("addBotBtn") && null;
 document.addEventListener("pointerdown", (e)=>{
