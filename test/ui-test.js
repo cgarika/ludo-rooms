@@ -126,10 +126,12 @@ async function test(title, fn) {
       } else {
         // bot's turn — hands off, just watch
         const v0 = st.v;
-        const board0 = await A.evaluate(() => document.getElementById("boardwrap").innerHTML.length + "|" + (document.getElementById("die").textContent || ""));
+        // snapshot the rendered board itself (sprite pawns print fixed-width coordinates, so a length check no longer sees moves)
+        const snap = () => A.evaluate(() => document.getElementById("boardwrap").innerHTML + "|" + (document.getElementById("die").innerHTML || ""));
+        const board0 = await snap();
         await A.waitForTimeout(2600);
         const v1 = await A.evaluate(() => S.room.v);
-        const board1 = await A.evaluate(() => document.getElementById("boardwrap").innerHTML.length + "|" + (document.getElementById("die").textContent || ""));
+        const board1 = await snap();
         if (v1 > v0) botAdvanced = true;
         if (board1 !== board0) boardChanged = true;
       }
