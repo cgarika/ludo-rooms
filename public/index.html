@@ -36,6 +36,8 @@
     --board-pad:#ffffff; --board-vignette:rgba(0,0,0,.42);
     --board-mode: dark;
   }
+  :where(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible{ outline:3px solid #ffcd3c; outline-offset:3px; }
+  @media (prefers-reduced-motion:reduce){ *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; } }
   *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
   body{
     margin:0; min-height:100vh; color:var(--txt);
@@ -91,7 +93,7 @@
   .divider{ display:flex; align-items:center; gap:10px; margin:16px 0; }
   .divider .line{ flex:1; height:1px; background:rgba(255,255,255,.14); }
   .divider .txt{ font-size:11.5px; font-weight:800; color:var(--mut); letter-spacing:.1em; }
-  .hint{ margin-top:16px; color:var(--mut); font-size:13px; text-align:center; max-width:400px; line-height:1.55; }
+  .hint{ margin-top:16px; color:#aab1d6; font-size:13.5px; text-align:center; max-width:400px; line-height:1.55; }
   .tiles{ display:flex; gap:7px; justify-content:center; }
   .tile{
     width:46px; height:54px; border-radius:12px; border:none; color:#fff;
@@ -131,6 +133,7 @@
   .tokbtn.na{ cursor:default; opacity:.55; }
   .setnote{ font-size:12px; color:var(--mut); font-weight:600; margin-top:7px; }
   .dot{ width:12px; height:12px; border-radius:50%; box-shadow:0 0 6px currentColor; flex-shrink:0; }
+.pill .dot{ width:17px; height:17px; font:900 9.5px/17px 'Baloo2',sans-serif; color:#10132a; text-align:center; }
   #game{ width:100%; max-width:472px; display:flex; flex-direction:column; align-items:center; }
   .pills{ display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:10px; max-width:472px; }
   .pill{
@@ -470,6 +473,9 @@ input:focus{
   border:1px solid rgba(255,255,255,.18); border-radius:18px; padding:10px 12px;
   box-shadow:0 10px 26px rgba(0,0,0,.45); pointer-events:none; }
 #dicehub #die, #dicehub #rollBtn{ pointer-events:auto; }
+#dicehub{ transition:transform .28s var(--ease-em), opacity .28s linear; }
+#dicehub.quiet{ transform:translate(-50%,-50%) scale(.72); opacity:.88; }
+@media (max-width:520px){ #dicehub.quiet{ transform:translate(-50%,-50%) scale(.62); } }
 @keyframes jshake{ 0%,100%{transform:translate(0,0)} 20%{transform:translate(-6px,2px)} 40%{transform:translate(5px,-3px)} 60%{transform:translate(-4px,-2px)} 80%{transform:translate(3px,2px)} }
 .jshake{ animation:jshake .38s ease; }
 #dicehub #rollBtn{ font-size:14.5px; }
@@ -1043,7 +1049,7 @@ function polyGeom(cfg){
   const wedge = {};
   colors.forEach(c=>{ const k = Math.round(cfg.starts[c]/seg); wedge[c] = [[CC, CC], Q(bis((k - 1 + N) % N), hub), Q(bis(k), hub)]; });
   /* jewel plate (art/plate.jpg): parchment inner measured at x 175..1095, y 180..1030 of 1254; drawn 6% oversize */
-  const PS = 1.06, k760 = CSZ/1254;
+  const PS = 1.18, k760 = CSZ/1254;
   const inX = [175, 1095].map(v=> CC + (v*k760 - CC)*PS), inY = [180, 1030].map(v=> CC + (v*k760 - CC)*PS);
   const plate = { img: { x: CC - CSZ*PS/2, size: CSZ*PS }, cx: (inX[0]+inX[1])/2, cy: (inY[0]+inY[1])/2,
                   s: Math.min(inX[1]-inX[0], inY[1]-inY[0]) / 2 / (Rb*d) };
@@ -1433,7 +1439,7 @@ function renderGame(r){
     const isTurn = r.status === "playing" && r.turn === i;
     return `<div class="pill${isTurn?" turn":""}${p.left?" gone":""}">
       <span class="pav">${p.avatar||""}</span>
-      <div class="dot" style="background:${HEX[p.color]}"></div>
+      <div class="dot" style="background:${HEX[p.color]}">${esc((p.name||"?").trim().charAt(0).toUpperCase())}</div>
       <span>${esc(p.name)}${i===S.mySeat?" (you)":""}</span>
       ${(r.teamMode&&r.teamOf)?`<span class="teamtag">T${r.teamOf[i]+1}</span>`:""}
       <span class="cnt">${home}/${r.cfg.tpp}</span>
@@ -1458,7 +1464,8 @@ function renderGame(r){
     drawDie();
     const mine = myTurn();
     $("rollBtn").classList.toggle("hidden", !(mine && r.phase === "roll"));
-    if (mine && r.phase === "move") $("turninfo").textContent = "Tap a glowing piece";
+    $("dicehub").classList.toggle("quiet", !(mine && r.phase === "roll"));
+    if (mine && r.phase === "move") $("turninfo").textContent = `You rolled ${r.die} — choose a pawn.`;
     else if (!mine) $("turninfo").textContent = (r.players[r.turn] ? r.players[r.turn].name : "") + "'s turn...";
     else $("turninfo").textContent = "";
     if (mine && r.phase === "move"){
@@ -1812,7 +1819,7 @@ function defsSVG(colors){
          `<stop offset="0%" stop-color="#ffffff" stop-opacity="${nest?0.5:dark?0.18:0.32}"/>`+
          `<stop offset="18%" stop-color="${nest?lighten(HEX[c],0.22):HEX[c]}"/>`+
          `<stop offset="58%" stop-color="${HEX[c]}"/>`+
-         `<stop offset="100%" stop-color="${nest?HEX[c]:DARKHEX[c]}"/></linearGradient>`;
+         `<stop offset="100%" stop-color="${nest?(c==="yellow"?"#e0a20e":HEX[c]):DARKHEX[c]}"/></linearGradient>`;
     d += `<linearGradient id="v_${c}" x1="0%" y1="0%" x2="0%" y2="100%">`+
          `<stop offset="0%" stop-color="#ffffff" stop-opacity="${dark?0.16:0.28}"/>`+
          `<stop offset="18%" stop-color="${HEX[c]}"/>`+
@@ -1976,7 +1983,16 @@ function tokensSVG(r, cfg){
       return Math.max(baseR, r);
     };
   }
-  const pieces = [];
+  /* where each movable pawn would land: a dashed ring on the destination cell */
+  let halos = "";
+  if (mine.length && r.die){
+    for (const i of mine){
+      const p = r.tokens[mc][i], to = p === -1 ? 0 : p + r.die;
+      const [hx, hy] = tokenXY(mc, to, i, cfg);
+      halos += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*0.95).toFixed(1)}" fill="${HEX[mc]}" fill-opacity=".18" stroke="${HEX[mc]}" stroke-width="2" stroke-dasharray="4 3"/>`;
+    }
+  }
+  const pieces = [{ y: -1e9, s: halos }];
   for (const g of Object.values(groups)){
     g.forEach((t, gi)=>{
       const off = g.length > 1 ? OFF[Math.min(gi,4)] : [0,0];
@@ -2043,6 +2059,10 @@ function drawBoard(r, force){
       s += `<text x="${cr[0]*CELL+CELL/2}" y="${cr[1]*CELL+CELL/2+7}" text-anchor="middle" font-size="20" fill="url(#starGold)" stroke="#5a3a00" stroke-opacity=".7" stroke-width="1" paint-order="stroke" filter="url(#safeGlow)">\u2605</text>`;
     }
   });
+  if (r.status === "playing" && r.players[r.turn]){
+    const tc = r.players[r.turn].color, [oc, orr] = BASE_ORIGIN[tc];
+    s += `<rect x="${oc*CELL+3}" y="${orr*CELL+3}" width="${6*CELL-6}" height="${6*CELL-6}" rx="22" fill="none" stroke="#ffffff" stroke-opacity=".7" stroke-width="3"/>`;
+  }
   for (const c of ["red","green","yellow","blue"]){
     for (const cr of HOME_PATH[c]){
       s += trackCell(cr[0]*CELL+1.5, cr[1]*CELL+1.5, CELL-3, CELL-3, 8, `url(#b_${c})`, isNestBoard() ? "rgba(70,40,10,.35)" : null);
@@ -2118,6 +2138,11 @@ function drawPolyBoard(r, cfg){
       s += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(d*0.4).toFixed(1)}" fill="none" stroke="${HEX[c]}" stroke-opacity="0.45" stroke-width="2"/>`;
       s += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(d*0.26).toFixed(1)}" fill="none" stroke="${HEX[c]}" stroke-opacity="0.16" stroke-width="1.3"/>`;
     }
+  }
+  /* whose turn: that arm's yard and wedge get a light lift so the eye lands on the right corner */
+  if (r.status === "playing" && r.players[r.turn]){
+    const tc = r.players[r.turn].color;
+    if (G.yard[tc]) s += `<path d="${polyPath(G.yard[tc], d*0.5)}" fill="none" stroke="#ffffff" stroke-opacity=".7" stroke-width="3"/>`;
   }
   /* home columns (3 cells each; the last two stops are the hub wedge) */
   for (const c of colors){
