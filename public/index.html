@@ -277,7 +277,14 @@
     .confetti i{ display:none; }
   }
   :root{ --ease-em: cubic-bezier(.2,0,0,1); }
-  .btn,.tokbtn,.avchip,.schip,.sendbtn,.chattoggle,.mutebtn,.themebtn{ position:relative; overflow:hidden; }
+  .btn,.tokbtn,.avchip,.schip,.sendbtn,.chattoggle{ position:relative; overflow:hidden; }
+  .mutebtn,.themebtn{ overflow:hidden; }                       /* stay position:fixed (top-right) */
+  /* wordmark rows never run under the fixed top buttons: web has two buttons, the app one */
+  #lobby .wordmark, #game .wordmark{ padding:0 112px 0 12px; }
+  html.in-app #lobby .wordmark, html.in-app #game .wordmark{ padding:0 60px 0 12px; }
+  /* (3) no visible scrollbars (iOS shows them on scroll containers); scrolling itself is untouched */
+  html, body, *{ scrollbar-width:none; }
+  ::-webkit-scrollbar{ width:0; height:0; display:none; }
   .ripple{
     position:absolute; border-radius:50%; background:rgba(255,255,255,.35);
     transform:scale(0); animation:rip .55s var(--ease-em) forwards; pointer-events:none;
@@ -517,6 +524,10 @@ input:focus{
 .rules{ color:#8089b3; }
 #toast{ border-color:rgba(255,203,79,.18); box-shadow:0 16px 38px rgba(0,0,0,.55); }
 @media (max-width:520px){
+  /* centre dice hub: ~35% smaller footprint on phones (die scaled, tighter chip, smaller ROLL) */
+  #dicehub{ padding:4px 6px; gap:2px; border-radius:13px; }
+  #die{ transform:scale(.7); margin:-9px; }
+  #dicehub #rollBtn{ font-size:12px; padding:7px 13px !important; }
   body{ padding:14px 10px 30px; }
   .wordmark{ font-size:27px; }
   .tagline{ margin-bottom:15px; }
@@ -1144,7 +1155,7 @@ function applyTheme(pref){
    earlier session must not override it — the web keeps the toggle and remembers the choice. */
 const IN_APP = !!window.GN;
 let themePref = IN_APP ? "nest" : (localStorage.getItem(THEME_KEY) || "nest");   // GameNest dark-glass board is the default skin
-if (IN_APP){ const tb = $("themeBtn"); if (tb) tb.style.display = "none"; }
+if (IN_APP){ document.documentElement.classList.add("in-app"); const tb = $("themeBtn"); if (tb) tb.style.display = "none"; }
 applyTheme(themePref);
 $("themeBtn").onclick = ()=>{
   if (IN_APP) return;
