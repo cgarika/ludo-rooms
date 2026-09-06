@@ -14,7 +14,7 @@ s.on("state", ({ room }) => {
     if (room.players.length >= N && !started) { started = true; console.log("players:", room.players.map((p) => p.name).join(", ")); setTimeout(() => s.emit("start", {}), 800); }
   } else if (room.status === "playing") {
     if (!global.a) { global.a = true; console.log("STARTED"); }
-    if (AUTO) { const me = room.players.findIndex((p) => p.name === "Host"); if (room.turn === me && !global.r) { global.r = true; setTimeout(() => { s.emit("roll"); global.r = false; }, 900); } }
+    if (AUTO) { const me = room.players.findIndex((p) => p.name === "Host"); if (room.turn === me && !global.r) { global.r = true; setTimeout(() => { if (AUTO === "draw") { if (room.phase === "drawn") s.emit("keep"); else s.emit("draw"); } else s.emit("roll"); global.r = false; }, 900); } }
   }
 });
 setTimeout(() => { s.disconnect(); process.exit(0); }, Number(process.env.KEEP_MS || 240000));

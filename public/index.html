@@ -1447,7 +1447,7 @@ function renderGame(r){
     return `<div class="pill${isTurn?" turn":""}${p.left?" gone":""}">
       <span class="pav">${p.avatar||""}</span>
       <div class="dot" style="background:${HEX[p.color]}">${esc((p.name||"?").trim().charAt(0).toUpperCase())}</div>
-      <span class="nm">${esc(p.name)}${i===S.mySeat?" (you)":""}</span>
+      <span class="nm">${i===S.mySeat?"You":esc(p.name)}</span>
       ${(r.teamMode&&r.teamOf)?`<span class="teamtag">T${r.teamOf[i]+1}</span>`:""}
       <span class="cnt">${home}/${r.cfg.tpp}</span>
       ${isTurn?"&#127922;":""}${!p.connected&&!p.left?'<span class="off">offline</span>':""}
@@ -1475,6 +1475,8 @@ function renderGame(r){
     if (mine && r.phase === "move") $("turninfo").textContent = `You rolled ${r.die} — choose a pawn.`;
     else if (!mine) $("turninfo").textContent = (r.players[r.turn] ? r.players[r.turn].name : "") + "'s turn...";
     else $("turninfo").textContent = "";
+    // one status line: the event log steps aside while the status line says the same thing
+    $("log").classList.toggle("hidden", (mine && r.phase === "move") || (/rolls first/.test(r.log || "") && !!$("turninfo").textContent));
     if (mine && r.phase === "move"){
       const legal = legalMoves(r);
       if (legal.length === 1 && lastAutoV !== r.v){
@@ -1996,7 +1998,7 @@ function tokensSVG(r, cfg){
     for (const i of mine){
       const p = r.tokens[mc][i], to = p === -1 ? 0 : p + r.die;
       const [hx, hy] = tokenXY(mc, to, i, cfg);
-      halos += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*0.95).toFixed(1)}" fill="${HEX[mc]}" fill-opacity=".18" stroke="${HEX[mc]}" stroke-width="2" stroke-dasharray="4 3"/>`;
+      halos += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*1.02).toFixed(1)}" fill="${HEX[mc]}" fill-opacity=".3" stroke="#ffcd3c" stroke-width="3" stroke-dasharray="6 4"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*0.72).toFixed(1)}" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.5"/>`;
     }
   }
   const pieces = [{ y: -1e9, s: halos }];
