@@ -7,7 +7,7 @@ const { chromium } = require("playwright"); const { spawn } = require("child_pro
   if (!code) { console.log("no code"); host.kill(); process.exit(1); }
   const b = await chromium.launch(); const ctx = await b.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }); const p = await ctx.newPage(); p.setDefaultTimeout(8000);
   await p.goto("https://needasix.com/eights/", { waitUntil: "domcontentloaded" }); await p.waitForTimeout(1200);
-  await p.evaluate(() => { document.documentElement.classList.add("in-app"); const st = document.createElement("style"); st.textContent = "html.in-app #lobby .wordmark, html.in-app #game .wordmark, html.in-app #leaveGameBtn, html.in-app #leaveLobbyBtn{display:none!important} html.in-app #game{padding-top:2px}"; document.head.appendChild(st); });
+  await require("./.inapp.tmp.js")(p);
   await p.fill("#nameIn", "Tester"); await p.fill("#codeIn", code); await p.click("#joinBtn"); await p.waitForTimeout(2500);
   console.log("joined", code, await p.evaluate(() => document.getElementById("game").classList.contains("hidden") ? "lobby" : "game"));
   let done = false; const t0 = Date.now();

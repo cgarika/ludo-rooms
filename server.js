@@ -155,6 +155,44 @@ function publicRoom(room) {
   };
 }
 
+
+/* ---------- GameNest push (optional; no-op without PUSH_URL) ----------
+
+   The app registers a device token per socket and reports presence; players who are away or disconnected
+
+   get a push when it becomes their turn / a new phase starts, and when someone writes in chat. */
+
+const PUSH_URL = process.env.PUSH_URL || "";
+
+const PUSH_TITLE = 'Ludo';
+
+function pushTo(p, body, data, collapse) {
+
+  if (!PUSH_URL || !p || !p.pushToken || p.bot || p.left) return;
+
+  if (!(p.away || !p.connected)) return;
+
+  const now = Date.now(); if (p._lastPush && now - p._lastPush < 4000) return; p._lastPush = now;
+
+  fetch(PUSH_URL + "/notify", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: p.pushToken, title: PUSH_TITLE, body, data: data || {}, collapse: collapse || undefined }) }).catch(() => {});
+
+}
+
+function pushTurn(room) {   // called after every state broadcast; only fires when the situation changes
+
+  const key = room.status + "|" + room.turn;
+
+  if (room._pushKey === key) return; room._pushKey = key;
+
+  if (room.status !== "playing") return;
+
+  const p = room.players[room.turn]; if (!p) return;
+
+  pushTo(p, "Your turn in " + PUSH_TITLE + " — room " + room.code, { code: room.code, game: PUSH_TITLE }, room.code + "-turn");
+
+}
+
+
 function sendState(code) {
   const room = rooms.get(code);
   const sockets = roomSockets.get(code);
@@ -163,6 +201,7 @@ function sendState(code) {
   for (const s of sockets) {
     const mySeat = room.players.findIndex((p) => p.id === s.data.playerId);
     s.emit("state", { room: pub, mySeat });
+    try { pushTurn(room); } catch (_) {}
   }
 }
 
@@ -456,6 +495,9 @@ io.on("connection", (socket) => {
     socket.emit("joined", { code, playerId: p.id });
     sendState(code);
   });
+  socket.on("pushToken", ({ token } = {}) => { const room = currentRoom(); if (!room) return; const p = room.players.find((q) => q.id === socket.data.playerId); if (p && typeof token === "string" && /^[0-9a-f]{32,200}$/i.test(token)) p.pushToken = token; });
+  socket.on("presence", ({ away } = {}) => { const room = currentRoom(); if (!room) return; const p = room.players.find((q) => q.id === socket.data.playerId); if (p) p.away = !!away; });
+
 
   socket.on("chat", ({ text, sticker } = {}) => {
     const room = currentRoom();
@@ -474,7 +516,7 @@ io.on("connection", (socket) => {
     }
     socket.data.lastChat = now;
     msg.n = p.name; msg.c = p.color; msg.a = p.avatar; msg.t = now;
-    room.chat.push(msg);
+    room.chat.push(msg); if (msg && msg.k === "t") for (const q of room.players) if (q !== p) pushTo(q, p.name + ": " + msg.x, { code: room.code, game: PUSH_TITLE }, room.code + "-chat");
     if (room.chat.length > CHAT_KEEP) room.chat.shift();
     room.v++;
     room.touched = now;

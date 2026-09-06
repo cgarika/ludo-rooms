@@ -15,6 +15,8 @@ host.on("state", ({ room }) => {
   if (!room) return;
   if (room.status === "lobby" && room.players.length >= N && !started) { started = true; console.log("players:", room.players.map((p) => p.name).join(", ")); setTimeout(() => host.emit("start", {}), 800); }
   else if (room.status !== "lobby" && !global.a) { global.a = true; console.log("STARTED"); }
+  if (process.env.SPYWATCH && room.status === "playing") { const t = room.players.find((p) => p.name === process.env.SPYWATCH); if (t && !global.sw) { global.sw = true; console.log(t.spymaster ? "ISSPY team=" + t.team : "NOTSPY"); }
+    if (t && t.spymaster && room.turnTeam === t.team && room.phase === "clue" && !global.st) { global.st = true; console.log("SPYTURN"); } }
   if (process.env.SUBMIT && room.phase === "write" && host.sub !== room.round) { host.sub = room.round; setTimeout(() => host.emit("submit", { text: "never saying 'calm down'" }), 600); }
 });
 setTimeout(() => process.exit(0), Number(process.env.KEEP_MS || 240000));
