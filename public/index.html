@@ -147,6 +147,12 @@
   }
   .pill.gone{ opacity:.4; }
   .pill .cnt{ color:var(--mut); font-weight:800; }
+  /* 5+ players: a 3-column grid instead of three wrapped rows — gives the polygon its height back */
+  .pills.many{ display:grid; grid-template-columns:repeat(3,1fr); gap:5px; width:100%; }
+  .pills.many .pill{ min-width:0; padding:5px 8px; font-size:12px; gap:5px; justify-content:flex-start; min-height:28px; }
+  .pills.many .pill .nm{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+  .pills.many .pill .pav{ display:none; }
+  .pills.many .pill .cnt{ font-size:11px; }
   .pill .off{ font-size:11px; color:var(--mut); }
   .woodframe{
     width:100%; max-width:472px; padding:10px; border-radius:26px; position:relative;
@@ -474,8 +480,8 @@ input:focus{
   box-shadow:0 10px 26px rgba(0,0,0,.45); pointer-events:none; }
 #dicehub #die, #dicehub #rollBtn{ pointer-events:auto; }
 #dicehub{ transition:transform .28s var(--ease-em), opacity .28s linear; }
-#dicehub.quiet{ transform:translate(-50%,-50%) scale(.72); opacity:.88; }
-@media (max-width:520px){ #dicehub.quiet{ transform:translate(-50%,-50%) scale(.62); } }
+#dicehub.quiet{ transform:translate(-50%,-50%) scale(.64); opacity:.72; }
+@media (max-width:520px){ #dicehub.quiet{ transform:translate(-50%,-50%) scale(.54); opacity:.68; } }
 @keyframes jshake{ 0%,100%{transform:translate(0,0)} 20%{transform:translate(-6px,2px)} 40%{transform:translate(5px,-3px)} 60%{transform:translate(-4px,-2px)} 80%{transform:translate(3px,2px)} }
 .jshake{ animation:jshake .38s ease; }
 #dicehub #rollBtn{ font-size:14.5px; }
@@ -1434,13 +1440,14 @@ function renderGame(r){
   applyTurnVisuals(r);
   const finish = r.cfg.M + 4;
 
+  $("pills").classList.toggle("many", r.players.length >= 5);
   $("pills").innerHTML = r.players.map((p,i)=>{
     const home = r.tokens[p.color] ? r.tokens[p.color].filter(q=>q===finish).length : 0;
     const isTurn = r.status === "playing" && r.turn === i;
     return `<div class="pill${isTurn?" turn":""}${p.left?" gone":""}">
       <span class="pav">${p.avatar||""}</span>
       <div class="dot" style="background:${HEX[p.color]}">${esc((p.name||"?").trim().charAt(0).toUpperCase())}</div>
-      <span>${esc(p.name)}${i===S.mySeat?" (you)":""}</span>
+      <span class="nm">${esc(p.name)}${i===S.mySeat?" (you)":""}</span>
       ${(r.teamMode&&r.teamOf)?`<span class="teamtag">T${r.teamOf[i]+1}</span>`:""}
       <span class="cnt">${home}/${r.cfg.tpp}</span>
       ${isTurn?"&#127922;":""}${!p.connected&&!p.left?'<span class="off">offline</span>':""}
