@@ -1140,9 +1140,14 @@ function applyTheme(pref){
   // force board redraw with new palette (no-op during initial load, before state exists)
   try { lastBoardKey = ""; if (S && S.room) drawBoard(S.room, true); } catch (e) {}
 }
-let themePref = localStorage.getItem(THEME_KEY) || "nest";   // GameNest dark-glass board is the default skin
+/* Inside the GameNest app (the bundle shim defines window.GN) the board has one skin: nest. A theme saved by an
+   earlier session must not override it — the web keeps the toggle and remembers the choice. */
+const IN_APP = !!window.GN;
+let themePref = IN_APP ? "nest" : (localStorage.getItem(THEME_KEY) || "nest");   // GameNest dark-glass board is the default skin
+if (IN_APP){ const tb = $("themeBtn"); if (tb) tb.style.display = "none"; }
 applyTheme(themePref);
 $("themeBtn").onclick = ()=>{
+  if (IN_APP) return;
   const order = ["auto","light","dark","nest"];
   const i = order.indexOf(themePref);
   themePref = order[(i+1)%order.length];
