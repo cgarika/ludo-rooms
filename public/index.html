@@ -1471,7 +1471,7 @@ function renderGame(r){
     drawDie();
     const mine = myTurn();
     $("rollBtn").classList.toggle("hidden", !(mine && r.phase === "roll"));
-    $("dicehub").classList.toggle("quiet", !(mine && r.phase === "roll"));
+    $("dicehub").classList.toggle("quiet", !(mine && (r.phase === "roll" || r.phase === "move")));   // full size whenever it is your turn: rolling or choosing a pawn
     if (mine && r.phase === "move") $("turninfo").textContent = `You rolled ${r.die} — choose a pawn.`;
     else if (!mine) $("turninfo").textContent = (r.players[r.turn] ? r.players[r.turn].name : "") + "'s turn...";
     else $("turninfo").textContent = "";
