@@ -8,9 +8,10 @@ const { chromium } = require("playwright"); const { spawn } = require("child_pro
   try {
     await p.goto("http://127.0.0.1:4177/", { waitUntil: "domcontentloaded", timeout: 25000 }); await p.waitForTimeout(3000);
     await p.screenshot({ path: OUT + "/shell-firstrun.png" });
-    const inp = await p.$("input"); if (inp) { await inp.fill("Chanu"); const btn = await p.$("text=Let's play"); if (btn) await btn.click(); await p.waitForTimeout(900); }
+    console.log("play disabled before typing:", await p.evaluate(() => !![...document.querySelectorAll("button")].find(b => /Let's play/.test(b.textContent) && b.disabled)));
+    const inp = await p.$("input"); if (inp) { await inp.fill("Chanu"); await p.waitForTimeout(200); await p.screenshot({ path: OUT + "/shell-firstrun-named.png" }); const btn = await p.$("text=Let's play"); if (btn) await btn.click(); await p.waitForTimeout(900); }
     await p.screenshot({ path: OUT + "/shell-home.png" });
-    for (const t of ["Wins", "More"]) { await p.click(`.tab:has-text("${t}")`); await p.waitForTimeout(900); await p.screenshot({ path: OUT + `/shell-${t.toLowerCase()}.png` }); }
+    for (const t of ["Squad", "Wins", "More"]) { await p.click(`.tab:has-text("${t}")`); await p.waitForTimeout(900); await p.screenshot({ path: OUT + `/shell-${t.toLowerCase()}.png` }); }
     console.log("wins labels", await p.evaluate(() => { const out = []; document.querySelectorAll(".trophy").forEach(t => { const r = t.getBoundingClientRect(); const s = t.querySelector("span").getBoundingClientRect(); out.push(`${t.querySelector("span").textContent}:${Math.round(r.width)}w sp=${Math.round(s.width)} ${s.right <= r.right + 1 ? "ok" : "CLIP"}`); }); return out.join(" | "); }));
     console.log("more rows", await p.evaluate(() => [...document.querySelectorAll(".row b")].map(b => b.textContent).join(" | ")));
     console.log("warm frame", await p.evaluate(() => { const w = document.querySelector(".play.warm"); if (!w) return "none"; const cs = getComputedStyle(w); return `opacity=${cs.opacity} z=${cs.zIndex} app-z=${getComputedStyle(document.getElementById("app")).zIndex}`; }));

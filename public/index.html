@@ -480,6 +480,9 @@ input:focus{
   box-shadow:0 10px 26px rgba(0,0,0,.45); pointer-events:none; }
 #dicehub #die, #dicehub #rollBtn{ pointer-events:auto; }
 #dicehub{ transition:transform .28s var(--ease-em), opacity .28s linear; }
+/* destination halos pulse three times when the choice begins (opacity only) */
+@keyframes haloPulse{ 50%{ opacity:.35; } }
+#boardwrap .halo{ animation:haloPulse .9s ease-in-out 3; }
 #dicehub.quiet{ transform:translate(-50%,-50%) scale(.64); opacity:.72; }
 @media (max-width:520px){ #dicehub.quiet{ transform:translate(-50%,-50%) scale(.54); opacity:.68; } }
 @keyframes jshake{ 0%,100%{transform:translate(0,0)} 20%{transform:translate(-6px,2px)} 40%{transform:translate(5px,-3px)} 60%{transform:translate(-4px,-2px)} 80%{transform:translate(3px,2px)} }
@@ -1998,7 +2001,7 @@ function tokensSVG(r, cfg){
     for (const i of mine){
       const p = r.tokens[mc][i], to = p === -1 ? 0 : p + r.die;
       const [hx, hy] = tokenXY(mc, to, i, cfg);
-      halos += `<circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*1.02).toFixed(1)}" fill="${HEX[mc]}" fill-opacity=".3" stroke="#ffcd3c" stroke-width="3" stroke-dasharray="6 4"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*0.72).toFixed(1)}" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.5"/>`;
+      halos += `<circle class="halo" cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*1.02).toFixed(1)}" fill="${HEX[mc]}" fill-opacity=".3" stroke="#ffcd3c" stroke-width="3" stroke-dasharray="6 4"/><circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="${(baseR*0.72).toFixed(1)}" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="1.5"/>`;
     }
   }
   const pieces = [{ y: -1e9, s: halos }];
