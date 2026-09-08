@@ -480,6 +480,18 @@ function addBotTo(room) {
   return p;
 }
 
+
+/* T3: the host seat follows the humans — first connected human, else first human still seated, else unchanged. */
+function ensureHost(room) {
+  const cur = room.players.find((p) => p.id === room.host);
+  if (cur && !cur.bot && !cur.left && cur.connected) return false;
+  const next = room.players.find((p) => !p.bot && !p.left && p.connected) || room.players.find((p) => !p.bot && !p.left);
+  if (!next || next.id === room.host) return false;
+  room.host = next.id;
+  room.log = `${next.name} is now the host.`;
+  return true;
+}
+
 io.on("connection", (socket) => {
   const currentRoom = () => rooms.get(socket.data.roomCode);
   const me = () => {
@@ -708,6 +720,7 @@ io.on("connection", (socket) => {
       p.connected = false;
       dropVoice(room, p.id);
       room.log = `${p.name} left the game.`;
+      ensureHost(room);
       if (room.players.every((q) => q.bot || q.left)) {
         detach(socket);
         deleteRoom(room.code);
@@ -784,6 +797,7 @@ io.on("connection", (socket) => {
     }
     p.connected = false;
     dropVoice(room, p.id);
+    ensureHost(room);
     room.v++;
     detach(socket);
     sendState(room.code);

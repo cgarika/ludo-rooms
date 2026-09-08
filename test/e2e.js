@@ -267,6 +267,39 @@ async function test(title, fn) {
   console.log("\n════════ RULES SUITE SUMMARY ════════");
   for (const r of results)
     console.log(` ${r.errors.length ? "FAIL" : "PASS"}  ${r.title}  (${r.secs}s)${r.errors.length ? "\n        " + r.errors.join("\n        ") : ""}`);
+  await test("5. T3 host handover + rematch by the new host", async () => {
+
+      // ---- T3 host handover: host disconnects during play → another human becomes host ----
+      {
+        const { spawn } = require("child_process");
+        const P=3131, URL2="http://localhost:"+P;
+        const srv = spawn(process.execPath, ["server.js"], { env: { ...process.env, PORT:String(P), BOT_DELAY_MS:"5", TURN_MS:"60000" }, stdio:"ignore" });
+        await sleep(600);
+        const mk2=(name)=>{ const c=io(URL2,{transports:["websocket"],reconnection:false}); c.st=null; c.seat=-1; c.logs=[]; c.on("state",({room,mySeat})=>{ c.st=room; c.seat=mySeat; if(room&&room.log) c.logs.push(room.log); }); return c; };
+        const wait=async(fn,ms=6000)=>{ const t0=Date.now(); while(Date.now()-t0<ms){ if(fn()) return true; await sleep(15);} return false; };
+        try {
+          const n=2; const cs=[]; for(let i=0;i<n;i++) cs.push(mk2("H"+i)); await sleep(250); let code=null; cs[0].on("joined",j=>{code=j.code;});
+          cs[0].emit("create",{name:"H0",playerId:"h0"+Math.random(),avatar:"🦊"}); await wait(()=>code); for(let i=1;i<n;i++) cs[i].emit("join",{code,name:"H"+i,playerId:"h"+i+Math.random(),avatar:"🐼"}); await wait(()=>cs[0].st&&cs[0].st.players.length===n);
+          cs[0].emit("settings",{tokens:1}); await wait(()=>cs[0].st.tokenChoice===1);
+          cs[0].emit("start"); if(!(await wait(()=>cs[1].st&&cs[1].st.status==="playing"))) throw new Error("T3: game did not start");
+          if(cs[1].st.hostSeat!==cs[0].seat) throw new Error("T3: creator is not the host at start");
+          cs[0].disconnect();
+          if(!(await wait(()=>cs[1].st.hostSeat===cs[1].seat, 3000))) throw new Error("T3: host did not move to the connected human (hostSeat "+cs[1].st.hostSeat+")");
+          if(!cs[1].logs.some(l=>/is now the host/.test(l))) throw new Error("T3: no host log line");
+          console.log("PASS T3 host handover — host disconnected mid-game, next connected human is host");
+          // rematch after the game ends: the new host (H1) can start it; the old host never comes back
+          { const drive=(c)=>{ const r=c.st; if(!r||r.status!=="playing"||r.turn!==c.seat) return; if(r.phase==="roll") c.emit("roll"); else if(r.phase==="move"){ const col=r.players[c.seat].color, f=r.cfg.M+4; const i=r.tokens[col].findIndex((t)=>t!==f&&(t===-1?r.die===6:t+r.die<=f)); if(i>=0) c.emit("move",{i}); } };
+            cs[1].on("state",()=>setTimeout(()=>drive(cs[1]),5));
+            // H0 is gone (disconnected, not left) — its turns are auto-played by the AFK policy, so the game reaches "over"
+            if(!(await wait(()=>cs[1].st.status==="over", 90000))) throw new Error("T3: game never ended (turn "+cs[1].st.turn+", phase "+cs[1].st.phase+")");
+            cs[1].emit("rematch"); if(!(await wait(()=>cs[1].st.status==="playing", 3000))) throw new Error("T3: new host could not start a rematch");
+            console.log("PASS T3 rematch by the new host after the original host is gone"); }
+          cs.forEach(c=>c.disconnect());
+        } finally { srv.kill(); }
+      }
+
+  });
+
   const failed = results.filter((r) => r.errors.length).length;
   console.log(failed ? `\n=== RESULT: FAIL (${failed} of ${results.length}) ===` : "\n=== RESULT: PASS ===");
   process.exit(failed ? 1 : 0);
