@@ -862,6 +862,7 @@ html[data-theme="dark"] #boardwrap::after, html[data-theme="nest"] #boardwrap::a
     <div id="log"></div>
     <div id="diceline" class="diceline">
       <div id="turninfo" class="turninfo"></div>
+      <button id="seatBackBtn" class="btn yellow hidden" style="width:auto;padding:9px 18px;margin-top:6px;">Take my seat back</button>
     </div>
     <div id="timerline" class="timer"></div>
     <div id="overbox" class="hidden">
@@ -1241,6 +1242,7 @@ $("rejoinBtn").onclick = ()=>{ saveMe(); socket.emit("join", { code: lastCode, n
 $("startBtn").onclick = ()=>socket.emit("start");
 $("rematchBtn").onclick = ()=>socket.emit("rematch");
 $("rollBtn").onclick = ()=>{
+  $("seatBackBtn").addEventListener("click", ()=>{ socket.emit("takeSeat"); });
   if (!myTurn() || S.room.phase !== "roll") return;
   startDieSpin();
   snd("roll");
@@ -1453,7 +1455,7 @@ function renderGame(r){
       <span class="nm">${i===S.mySeat?"You":esc(p.name)}</span>
       ${(r.teamMode&&r.teamOf)?`<span class="teamtag">T${r.teamOf[i]+1}</span>`:""}
       <span class="cnt">${home}/${r.cfg.tpp}</span>
-      ${isTurn?"&#127922;":""}${!p.connected&&!p.left?'<span class="off">offline</span>':""}
+      ${isTurn?"&#127922;":""}${p.botControlled?'<span class="off" title="A bot is playing this seat">&#129302; bot playing</span>':(!p.connected&&!p.left?'<span class="off">offline</span>':"")}
     </div>`;
   }).join("");
 
@@ -1475,8 +1477,11 @@ function renderGame(r){
     const mine = myTurn();
     $("rollBtn").classList.toggle("hidden", !(mine && r.phase === "roll"));
     $("dicehub").classList.toggle("quiet", !(mine && (r.phase === "roll" || r.phase === "move")));   // full size whenever it is your turn: rolling or choosing a pawn
-    if (mine && r.phase === "move") $("turninfo").textContent = `You rolled ${r.die} — choose a pawn.`;
-    else if (!mine) $("turninfo").textContent = (r.players[r.turn] ? r.players[r.turn].name : "") + "'s turn...";
+    const meBot = S.mySeat >= 0 && r.players[S.mySeat] && r.players[S.mySeat].botControlled;
+    $("seatBackBtn").classList.toggle("hidden", !meBot);
+    if (meBot) $("turninfo").textContent = "A bot is playing for you.";
+    else if (mine && r.phase === "move") $("turninfo").textContent = `You rolled ${r.die} — choose a pawn.`;
+    else if (!mine) $("turninfo").textContent = (r.players[r.turn] ? r.players[r.turn].name : "") + (r.players[r.turn] && r.players[r.turn].botControlled ? "'s turn (bot playing)..." : "'s turn...");
     else $("turninfo").textContent = "";
     // one status line: the event log steps aside while the status line says the same thing
     $("log").classList.toggle("hidden", (mine && r.phase === "move") || (/rolls first/.test(r.log || "") && !!$("turninfo").textContent));

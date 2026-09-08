@@ -22,6 +22,10 @@ const ROOM_IDLE_MS = 2 * 3600e3;
 const MAX_PLAYERS = 10;
 const CHAT_KEEP = 60;
 const CHAT_COOLDOWN_MS = 800;
+const TURN_MS = Math.max(500, Number(process.env.TURN_MS || 60000));        // normal turn timer (45 s at 6+ players)
+const TURN_MS_BIG = Math.max(500, Number(process.env.TURN_MS_BIG || Math.min(45000, TURN_MS)));
+const AFK_MS = Math.max(200, Number(process.env.AFK_MS || 5000));            // turn timer while the player is disconnected
+const TIMEOUTS_TO_BOT = 3;                                                     // consecutive timeouts before a bot takes the seat
 
 const ORDER = ["red","green","yellow","blue","orange","purple","teal","pink","lime","brown"];
 const ASSIGN = ["red","yellow","green","blue","orange","purple","teal","pink","lime","brown"];
@@ -113,18 +117,59 @@ function armTimer(code) {
     if (room) room.turnEndsAt = null;
     return;
   }
-  const ms = room.players.length >= 6 ? 45000 : 60000;
+  const cur = room.players[room.turn];
+  const ms = cur && !cur.bot && !cur.botControlled && !cur.connected ? AFK_MS : room.players.length >= 6 ? TURN_MS_BIG : TURN_MS;
   room.turnEndsAt = Date.now() + ms;
-  timers.set(code, setTimeout(() => {
-    const r = rooms.get(code);
-    if (!r || r.status !== "playing") return;
-    r.log = `${r.players[r.turn].name} ran out of time. Turn skipped.`;
+  timers.set(code, setTimeout(() => onTurnTimeout(code), ms));
+}
+
+/* T1 AFK policy: a timed-out turn is auto-played with the bot heuristic instead of skipped;
+   three consecutive timeouts hand the seat to the bot until the human acts or reconnects. */
+function onTurnTimeout(code) {
+  const r = rooms.get(code);
+  if (!r || r.status !== "playing") return;
+  const pl = r.players[r.turn];
+  if (!pl) return;
+  let note = "";
+  if (!pl.bot && !pl.botControlled) {
+    pl.timeouts = (pl.timeouts || 0) + 1;
+    if (pl.timeouts >= TIMEOUTS_TO_BOT) {
+      pl.botControlled = true;
+      note = `A bot is playing for ${pl.name} (timed out ${TIMEOUTS_TO_BOT} times).`;
+    } else {
+      note = `${pl.name} ran out of time; the turn was played for them.`;
+    }
+  }
+  autoPlayTurn(r);
+  if (note && rooms.get(code) === r) {   // keep the note visible ahead of whatever the auto-played turn logged
+    r.log = `${note} ${r.log}`;
     r.v++;
-    passTurn(r);
-    r.touched = Date.now();
     sendState(code);
-    armTimer(code);
-  }, ms));
+  }
+}
+
+/* Plays the current seat's whole turn (roll, move, and any extra rolls from sixes) with the bot heuristic. */
+function autoPlayTurn(r) {
+  const seat = r.turn;
+  for (let guard = 0; guard < 6 && r.status === "playing" && r.turn === seat; guard++) {
+    if (r.phase === "roll") { performRoll(r); continue; }
+    const lm = legalMoves(r);
+    if (lm.length) performMove(r, botPick(r, lm));
+    else { passTurn(r); r.v++; r.touched = Date.now(); sendState(r.code); armTimer(r.code); }
+  }
+  if (r.status === "playing" && r.turn === seat) armTimer(r.code);   // still their turn (very rare): keep the clock running
+}
+
+/* The human acts (or reconnects): take the seat back from the bot and reset the timeout streak. */
+function humanIsBack(room, p, reason) {
+  const wasBot = !!p.botControlled;
+  p.timeouts = 0;
+  if (!wasBot) return false;
+  p.botControlled = false;
+  room.log = `${p.name} is back at the table${reason ? " (" + reason + ")" : ""}.`;
+  room.v++;
+  if (room.status === "playing" && room.players[room.turn] === p) { clearBotTimer(room.code); armTimer(room.code); }
+  return true;
 }
 
 function publicRoom(room) {
@@ -132,7 +177,7 @@ function publicRoom(room) {
     code: room.code,
     status: room.status,
     players: room.players.map((p) => ({
-      name: p.name, color: p.color, left: p.left, connected: p.connected, avatar: p.avatar, bot: !!p.bot,
+      name: p.name, color: p.color, left: p.left, connected: p.connected, avatar: p.avatar, bot: !!p.bot, botControlled: !!p.botControlled,
     })),
     hostSeat: room.players.findIndex((p) => p.id === room.host),
     turn: room.turn,
@@ -368,13 +413,13 @@ function scheduleBot(code) {
   const room = rooms.get(code);
   if (!room || room.status !== "playing") return;
   const pl = room.players[room.turn];
-  if (!pl || !pl.bot) return;
+  if (!pl || !(pl.bot || pl.botControlled)) return;
   botTimers.set(code, setTimeout(() => {
     botTimers.delete(code);
     const r = rooms.get(code);
     if (!r || r.status !== "playing") return;
     const cur = r.players[r.turn];
-    if (!cur || !cur.bot) return;
+    if (!cur || !(cur.bot || cur.botControlled)) return;
     if (r.phase === "roll") {
       performRoll(r);
     } else if (r.phase === "move") {
@@ -474,6 +519,8 @@ io.on("connection", (socket) => {
     if (p) {
       p.connected = true;
       p.left = false;
+      humanIsBack(room, p, "reconnected");
+      if (room.status === "playing" && room.players[room.turn] === p) armTimer(code);   // back on the normal clock
       if (name) p.name = name;
       if (avatar) p.avatar = cleanAvatar(avatar);
       socket.data.playerId = p.id;
@@ -596,7 +643,10 @@ io.on("connection", (socket) => {
 
   socket.on("roll", () => {
     const room = currentRoom();
-    if (!room || room.status !== "playing" || room.phase !== "roll") return;
+    if (!room || room.status !== "playing") return;
+    const self = me();
+    if (self && humanIsBack(room, self, "took the seat back")) { clearBotTimer(room.code); room.touched = Date.now(); sendState(room.code); }   // any action reclaims a bot-controlled seat
+    if (room.phase !== "roll") return;
     const pl = room.players[room.turn];
     if (pl.id !== socket.data.playerId) return;
     performRoll(room);
@@ -604,13 +654,22 @@ io.on("connection", (socket) => {
 
   socket.on("move", ({ i } = {}) => {
     const room = currentRoom();
-    if (!room || room.status !== "playing" || room.phase !== "move") return;
+    if (!room || room.status !== "playing") return;
+    const self = me();
+    if (self && humanIsBack(room, self, "took the seat back")) { clearBotTimer(room.code); room.touched = Date.now(); sendState(room.code); }
+    if (room.phase !== "move") return;
     const pl = room.players[room.turn];
     if (pl.id !== socket.data.playerId) return;
     performMove(room, i);
   });
 
 
+
+  socket.on("takeSeat", () => {
+    const room = currentRoom(); const p = me();
+    if (!room || !p) return;
+    if (humanIsBack(room, p, "took the seat back")) { room.touched = Date.now(); sendState(room.code); }
+  });
 
   socket.on("rematch", () => {
     const room = currentRoom();
@@ -728,6 +787,7 @@ io.on("connection", (socket) => {
     room.v++;
     detach(socket);
     sendState(room.code);
+    if (room.status === "playing" && room.players[room.turn] === p) armTimer(room.code);   // 5 s clock while they are away
   });
 });
 
