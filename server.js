@@ -437,6 +437,21 @@ function scheduleBot(code) {
   }, BOT_DELAY_MS + Math.floor(Math.random() * Math.max(1, BOT_DELAY_MS))));
 }
 
+/* T8: risk-aware bot. Priorities, first match wins:
+   1. capture — prefer multi-captures, then the enemy token furthest along
+   2. finish a token exactly
+   3. rescue a threatened token (an enemy 1–6 cells behind it on a non-safe cell) onto a safe cell or into the home lane
+   4. bring a token out on a six
+   5. land on a safe cell or enter the home lane
+   6. advance the furthest track token whose destination is not threatened; otherwise the lowest-risk move
+      (never leave a safe cell for a threatened one when a calmer move exists); track tokens before lane tokens. */
+function enemyColorsOf(room, color) {
+  return Object.keys(room.tokens).filter((c) => {
+    if (c === color) return false;
+    if (room.teamMode && room.teamOf) { const vSeat = room.players.findIndex((q) => q.color === c); if (vSeat >= 0 && room.teamOf[vSeat] === room.teamOf[room.turn]) return false; }
+    return true;
+  });
+}
 function botPick(room, lm) {
   const cfg = room.cfg;
   const color = room.players[room.turn].color;
@@ -445,28 +460,39 @@ function botPick(room, lm) {
   const trackEnd = cfg.M - 2;
   const safeSet = new Set(cfg.safe);
   const toks = room.tokens[color];
+  const onTrack = (p) => p >= 0 && p <= trackEnd;
+  const absOf = (c, p) => (cfg.starts[c] + p) % cfg.M;
   const lands = (i) => (toks[i] === -1 ? 0 : toks[i] + die);
+  const enemyToks = [];
+  for (const c of enemyColorsOf(room, color)) room.tokens[c].forEach((p, i) => { if (onTrack(p)) enemyToks.push({ c, i, p, abs: absOf(c, p) }); });
+  const capturesAt = (abs) => (safeSet.has(abs) ? [] : enemyToks.filter((e) => e.abs === abs));
+  const threatAt = (abs) => (safeSet.has(abs) ? 0 : enemyToks.filter((e) => { const d = (abs - e.abs + cfg.M) % cfg.M; return d >= 1 && d <= 6; }).length);
+  const dest = (i) => { const to = lands(i); const abs = onTrack(to) ? absOf(color, to) : null; return { to, abs, safe: abs == null || safeSet.has(abs), risk: abs == null ? 0 : threatAt(abs) }; };
+  const isTrack = (i) => onTrack(toks[i]);
+  const leavesSafe = (i) => (isTrack(i) && safeSet.has(absOf(color, toks[i])) ? 1 : 0);
+  const furthest = (arr) => arr.reduce((a, b) => (toks[a] >= toks[b] ? a : b));
+  // 1. capture
+  let best = null, bestScore = -1;
   for (const i of lm) {
-    const to = lands(i);
-    if (to >= 0 && to <= trackEnd) {
-      const abs = (cfg.starts[color] + to) % cfg.M;
-      if (!safeSet.has(abs)) {
-        for (const c of Object.keys(room.tokens)) {
-          if (c === color) continue;
-          if (room.teamMode && room.teamOf) {
-            const vSeat = room.players.findIndex((q) => q.color === c);
-            if (vSeat >= 0 && room.teamOf[vSeat] === room.teamOf[room.turn]) continue;
-          }
-          if (room.tokens[c].some((p) => p >= 0 && p <= trackEnd && (cfg.starts[c] + p) % cfg.M === abs)) return i;
-        }
-      }
-    }
+    const d = dest(i); if (d.abs == null) continue;
+    const caps = capturesAt(d.abs); if (!caps.length) continue;
+    const score = caps.length * 1000 + Math.max(...caps.map((e) => e.p));
+    if (score > bestScore) { bestScore = score; best = i; }
   }
+  if (best != null) return best;
+  // 2. exact finish
   for (const i of lm) if (lands(i) === finish) return i;
+  // 3. rescue
+  const rescues = lm.filter((i) => isTrack(i) && threatAt(absOf(color, toks[i])) > 0 && dest(i).safe);
+  if (rescues.length) return furthest(rescues);
+  // 4. out on a six
   for (const i of lm) if (toks[i] === -1) return i;
-  let best = lm[0];
-  for (const i of lm) if (toks[i] > toks[best]) best = i;
-  return best;
+  // 5. safe landing / lane entry
+  const safes = lm.filter((i) => isTrack(i) && dest(i).safe);
+  if (safes.length) return furthest(safes);
+  // 6. calm advance, else lowest risk
+  const order = lm.slice().sort((a, b) => (dest(a).risk - dest(b).risk) || (leavesSafe(a) - leavesSafe(b)) || (isTrack(b) - isTrack(a)) || (toks[b] - toks[a]));
+  return order[0];
 }
 
 function addBotTo(room) {
@@ -812,6 +838,7 @@ setInterval(() => {
   }
 }, 10 * 60e3);
 
-server.listen(PORT, () => {
+if (require.main === module) server.listen(PORT, () => {
   console.log(`Ludo Rooms running on port ${PORT}`);
 });
+module.exports = { buildConfig, legalMoves, botPick };
