@@ -4,7 +4,8 @@
   "description": "Self-hosted multiplayer Ludo. Share a room code, play with 2-4 friends. No ads.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node test/guard.js && node test/gn19.js && node test/afk.js && node test/plus_board.js && node test/reactions.js && node test/moderation.js && node test/pacing.js && node test/plus_wallet.js && node test/power.js && node test/roomcode.js"
   },
   "dependencies": {
     "express": "^4.19.2",

@@ -8,7 +8,7 @@
    Run from repo root: node test/afk.js */
 const { spawn } = require("child_process");
 const { io } = require("socket.io-client");
-const PORT = 3121, BASE = `http://localhost:${PORT}`;
+const PORT = Number(process.env.TEST_PORT2 || 3121), BASE = `http://localhost:${PORT}`;
 const TURN_MS = 700, AFK_MS = 250;
 let failed = 0; const ok = (m) => console.log("  ✓", m); const bad = (m) => { console.log("  ✗", m); failed++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

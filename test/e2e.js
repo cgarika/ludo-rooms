@@ -272,7 +272,7 @@ async function test(title, fn) {
       // ---- T3 host handover: host disconnects during play → another human becomes host ----
       {
         const { spawn } = require("child_process");
-        const P=3131, URL2="http://localhost:"+P;
+        const P=Number(process.env.TEST_PORT3 || 3131), URL2="http://localhost:"+P;
         const srv = spawn(process.execPath, ["server.js"], { env: { ...process.env, PORT:String(P), BOT_DELAY_MS:"5", TURN_MS:"60000" }, stdio:"ignore" });
         await sleep(600);
         const mk2=(name)=>{ const c=io(URL2,{transports:["websocket"],reconnection:false}); c.st=null; c.seat=-1; c.logs=[]; c.on("state",({room,mySeat})=>{ c.st=room; c.seat=mySeat; if(room&&room.log) c.logs.push(room.log); }); return c; };
