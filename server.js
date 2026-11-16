@@ -46,7 +46,10 @@ const POWER_HOLD_MS = Math.max(50, Number(process.env.POWER_HOLD_MS || 4000));  
 const ORDER = ["red","green","yellow","blue","orange","purple","teal","pink","lime","brown"];
 const ASSIGN = ["red","yellow","green","blue","orange","purple","teal","pink","lime","brown"];
 const STICKERS = ["lol","cry","fire","dice","snail","devil","pray","skull","party","angry","pinch","run"];
-const AVATARS = ["\u{1F60E}","\u{1F913}","\u{1F451}","\u{1F42F}","\u{1F43C}","\u{1F98A}","\u{1F47D}","\u{1F916}","\u{1F355}","\u{1F438}","\u{1F984}","\u{1F4A9}"];
+// v1's twelve, then GameNest 2.0's twenty sticker avatars (the app's Content/Data/games.json "avatars"): an avatar outside this
+// list reached the other players as a plain smiley, so in Ludo 15 of the app's 20 stickers showed as 🙂 to everyone else (2026-11-16).
+const AVATARS = ["\u{1F60E}","\u{1F913}","\u{1F451}","\u{1F42F}","\u{1F43C}","\u{1F98A}","\u{1F47D}","\u{1F916}","\u{1F355}","\u{1F438}","\u{1F984}","\u{1F4A9}",
+  "\u{1F419}","\u{1F981}","\u{1F47B}","\u{1F427}","\u{1F424}","\u{1F432}","\u{1F435}","\u{1F996}","\u{1F428}","\u{1F980}","\u{1F989}","\u{1F98E}","\u{1F988}","\u{1F41D}","\u{1F335}"];
 
 const rooms = new Map();
 app.get("/internal/roster/:code", Plus.rosterHandler((code) => rooms.get(code)));   // who is at a table, for the wallet's Treat the room (404 without GN_INTERNAL_SECRET)
